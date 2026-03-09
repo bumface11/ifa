@@ -54,12 +54,12 @@ def _build_life_events(
     start_age: int,
     end_age: int,
 ) -> tuple[LifeEvent, ...]:
-    """Collect life events from sidebar inputs and return a typed tuple."""
+    """Collect life events from active Streamlit container inputs."""
     life_events: list[LifeEvent] = []
 
-    st.sidebar.markdown("### Life Events")
+    st.markdown("Life Events")
     lump_count = int(
-        st.sidebar.number_input(
+        st.number_input(
             "Lump-sum events",
             min_value=0,
             max_value=5,
@@ -68,9 +68,9 @@ def _build_life_events(
         )
     )
     for index in range(lump_count):
-        st.sidebar.markdown(f"Lump sum #{index + 1}")
+        st.markdown(f"Lump sum #{index + 1}")
         lump_age = int(
-            st.sidebar.number_input(
+            st.number_input(
                 f"Age (lump #{index + 1})",
                 min_value=start_age,
                 max_value=end_age,
@@ -80,7 +80,7 @@ def _build_life_events(
             )
         )
         lump_amount = float(
-            st.sidebar.number_input(
+            st.number_input(
                 f"Amount GBP (lump #{index + 1})",
                 min_value=0.0,
                 value=18_000.0,
@@ -93,7 +93,7 @@ def _build_life_events(
             life_events.append(LumpSumEvent(age=lump_age, amount=lump_amount))
 
     step_count = int(
-        st.sidebar.number_input(
+        st.number_input(
             "Spending-step events",
             min_value=0,
             max_value=5,
@@ -102,9 +102,9 @@ def _build_life_events(
         )
     )
     for index in range(step_count):
-        st.sidebar.markdown(f"Spending step #{index + 1}")
+        st.markdown(f"Spending step #{index + 1}")
         step_start = int(
-            st.sidebar.number_input(
+            st.number_input(
                 f"Start age (step #{index + 1})",
                 min_value=start_age,
                 max_value=end_age,
@@ -114,7 +114,7 @@ def _build_life_events(
             )
         )
         step_amount = float(
-            st.sidebar.number_input(
+            st.number_input(
                 f"Extra per year GBP (step #{index + 1})",
                 min_value=0.0,
                 value=6_000.0,
@@ -123,7 +123,7 @@ def _build_life_events(
                 help="Extra spending per year in GBP for this step event.",
             )
         )
-        has_end = st.sidebar.checkbox(
+        has_end = st.checkbox(
             f"Set end age (step #{index + 1})",
             value=False,
             key=f"step_has_end_{index}",
@@ -132,7 +132,7 @@ def _build_life_events(
         step_end = None
         if has_end:
             step_end = int(
-                st.sidebar.number_input(
+                st.number_input(
                     f"End age (step #{index + 1})",
                     min_value=step_start,
                     max_value=end_age,
@@ -155,11 +155,11 @@ def _build_life_events(
 
 
 def _build_db_pensions(start_age: int, end_age: int) -> list[tuple[int, float]]:
-    """Collect DB pension inputs from the sidebar."""
-    st.sidebar.markdown("### DB Pensions")
+    """Collect DB pension inputs from the active Streamlit container."""
+    st.markdown("DB Pensions")
     default_streams = len(DB_PENSIONS)
     stream_count = int(
-        st.sidebar.number_input(
+        st.number_input(
             "DB income streams",
             min_value=0,
             max_value=6,
@@ -172,7 +172,7 @@ def _build_db_pensions(start_age: int, end_age: int) -> list[tuple[int, float]]:
         default_age = DB_PENSIONS[index][0] if index < default_streams else start_age
         default_amount = DB_PENSIONS[index][1] if index < default_streams else 10_000.0
         stream_age = int(
-            st.sidebar.number_input(
+            st.number_input(
                 f"DB start age #{index + 1}",
                 min_value=start_age,
                 max_value=end_age,
@@ -182,7 +182,7 @@ def _build_db_pensions(start_age: int, end_age: int) -> list[tuple[int, float]]:
             )
         )
         stream_amount = float(
-            st.sidebar.number_input(
+            st.number_input(
                 f"DB annual amount GBP #{index + 1}",
                 min_value=0.0,
                 value=float(default_amount),
@@ -203,12 +203,45 @@ def main() -> None:
         """
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Chivo:wght@400;700&family=Fraunces:opsz,wght@9..144,600&display=swap');
+        :root {
+            --ifa-text: #1f2937;
+            --ifa-heading: #0f2d3a;
+            --ifa-muted: #344054;
+        }
         html, body, [class*="css"]  {
             font-family: "Chivo", sans-serif;
+            color: var(--ifa-text);
         }
         h1, h2, h3 {
             font-family: "Fraunces", serif;
             letter-spacing: 0.3px;
+            color: var(--ifa-heading);
+        }
+        p, li, label, span, .stCaption {
+            color: var(--ifa-text);
+        }
+        [data-testid="stSidebar"] p,
+        [data-testid="stSidebar"] li,
+        [data-testid="stSidebar"] label,
+        [data-testid="stSidebar"] span,
+        [data-testid="stSidebar"] h1,
+        [data-testid="stSidebar"] h2,
+        [data-testid="stSidebar"] h3 {
+            color: var(--ifa-text);
+        }
+        [data-testid="stMetricLabel"],
+        [data-testid="stMetricValue"] {
+            color: var(--ifa-heading);
+        }
+        [data-testid="stMetricValue"] {
+            font-size: 1.55rem;
+            line-height: 1.1;
+        }
+        [data-testid="stMetricLabel"] {
+            font-size: 0.95rem;
+        }
+        .stMarkdown small {
+            color: var(--ifa-muted);
         }
         .stApp {
             background: radial-gradient(
@@ -347,8 +380,11 @@ def main() -> None:
 
     save_outputs = st.sidebar.checkbox("Save PNG outputs to output/", value=False)
 
-    db_pensions = _build_db_pensions(start_age, end_age)
-    life_events = _build_life_events(start_age, end_age)
+    with st.sidebar.expander("DB Pension Inputs", expanded=False):
+        db_pensions = _build_db_pensions(start_age, end_age)
+
+    with st.sidebar.expander("Life Event Inputs", expanded=False):
+        life_events = _build_life_events(start_age, end_age)
 
     run_model = st.sidebar.button("Run simulation", type="primary")
     if not run_model:
@@ -498,6 +534,14 @@ def main() -> None:
     if fan_fig is not None:
         st.markdown("### Monte Carlo Fan Chart")
         st.pyplot(fan_fig, clear_figure=True)
+
+    st.markdown("### Pot Charts Guide")
+    st.write(
+        "The next two charts show the same retirement path from two angles. "
+        "The stacked chart shows how each pot contributes to your total over time. "
+        "The 4-panel chart separates each pot so you can see which pot is being "
+        "used first, how quickly it changes, and when DB income becomes important."
+    )
 
     stacked_fig = plot_pots_stacked_area(
         tax_free_pot=tax_free_pot,

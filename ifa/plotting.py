@@ -47,73 +47,90 @@ def _draw_note_marker(
         age,
         y_position,
         str(note_number),
-        fontsize=8,
+        fontsize=10,
         fontweight="bold",
         ha="center",
         va="center",
         color="black",
-        bbox={"boxstyle": "circle,pad=0.22", "facecolor": color, "alpha": 0.9},
+        bbox={"boxstyle": "circle,pad=0.3", "facecolor": color, "alpha": 0.9},
     )
 
 
+def _apply_numeric_text_scale(ax: plt.Axes) -> None:
+    """Increase numeric tick-label readability for zoomed-out views."""
+    ax.tick_params(axis="both", labelsize=11)
+
+
 def _add_notes_box(fig: Figure, notes: Sequence[str]) -> None:
-    """Add a compact notes box below the chart for numbered event markers."""
+    """Add a compact notes box to the right side of the chart."""
     if len(notes) == 0:
         fig.tight_layout()
         return
 
-    fig.tight_layout(rect=(0, 0.16, 1, 1))
+    fig.tight_layout(rect=(0, 0, 0.76, 1))
     fig.text(
-        0.01,
-        0.02,
+        0.78,
+        0.98,
         "Event notes\n" + "\n".join(notes),
         ha="left",
-        va="bottom",
-        fontsize=9,
-        bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.85},
+        va="top",
+        fontsize=10,
+        bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.88},
     )
 
 
-def add_event_lines_to_plot(
+def _draw_sorted_event_annotations(
     ax: plt.Axes,
+    event_entries: Sequence[tuple[int, str, str]],
+    show_note_markers: bool = True,
+) -> list[str]:
+    """Draw age-sorted event lines and optional numbered markers."""
+    sorted_events = sorted(event_entries, key=lambda item: item[0])
+    notes: list[str] = []
+
+    for index, (age, note_text, color) in enumerate(sorted_events, start=1):
+        ax.axvline(
+            x=age,
+            color=color,
+            linestyle="--",
+            linewidth=2,
+            alpha=0.65,
+        )
+        if show_note_markers:
+            _draw_note_marker(
+                ax=ax,
+                age=age,
+                note_number=index,
+                slot=index - 1,
+                color=color,
+            )
+        notes.append(f"{index}. {note_text}")
+
+    return notes
+
+
+def _collect_standard_event_entries(
     secondary_dc_drawdown_age: int | None,
     db_pensions: Sequence[DbPensionInput],
     start_age: int,
     end_age: int,
-    note_start: int = 1,
-    show_note_markers: bool = True,
-) -> tuple[list[str], int]:
-    """Add numbered markers and vertical lines for key pension events."""
+) -> list[tuple[int, str, str]]:
+    """Collect standard pension events as (age, note, color)."""
     colors_event = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A"]
     event_index = 0
-    notes: list[str] = []
-    note_number = note_start
+    entries: list[tuple[int, str, str]] = []
 
     if (
         secondary_dc_drawdown_age is not None
         and start_age <= secondary_dc_drawdown_age <= end_age
     ):
-        color = colors_event[event_index % len(colors_event)]
-        ax.axvline(
-            x=secondary_dc_drawdown_age,
-            color=color,
-            linestyle="--",
-            linewidth=2,
-            alpha=0.6,
-        )
-        if show_note_markers:
-            _draw_note_marker(
-                ax=ax,
-                age=secondary_dc_drawdown_age,
-                note_number=note_number,
-                slot=event_index,
-                color=color,
+        entries.append(
+            (
+                secondary_dc_drawdown_age,
+                f"Secondary DC drawdown starts at age {secondary_dc_drawdown_age}.",
+                colors_event[event_index % len(colors_event)],
             )
-        notes.append(
-            f"{note_number}. Secondary DC drawdown starts at age "
-            f"{secondary_dc_drawdown_age}."
         )
-        note_number += 1
         event_index += 1
 
     for pension in db_pensions:
@@ -122,89 +139,75 @@ def add_event_lines_to_plot(
             db_amount = pension.annual_amount
         else:
             db_start_age, db_amount = pension
+
         if start_age <= db_start_age <= end_age:
-            color = colors_event[event_index % len(colors_event)]
-            ax.axvline(
-                x=db_start_age,
-                color=color,
-                linestyle="--",
-                linewidth=2,
-                alpha=0.6,
-            )
-            if show_note_markers:
-                _draw_note_marker(
-                    ax=ax,
-                    age=db_start_age,
-                    note_number=note_number,
-                    slot=event_index,
-                    color=color,
+            entries.append(
+                (
+                    db_start_age,
+                    f"DB income starts at age {db_start_age}: "
+                    f"GBP{db_amount:,.0f}/year.",
+                    colors_event[event_index % len(colors_event)],
                 )
-            notes.append(
-                f"{note_number}. DB income starts at age {db_start_age}: "
-                f"GBP{db_amount:,.0f}/year."
             )
-            note_number += 1
             event_index += 1
 
-    return notes, note_number
+    return entries
 
 
-def add_life_event_lines_to_plot(
-    ax: plt.Axes,
+def _collect_life_event_entries(
     life_events: Sequence[LifeEvent],
     start_age: int,
     end_age: int,
-    note_start: int = 1,
-    show_note_markers: bool = True,
-) -> tuple[list[str], int]:
-    """Add numbered markers and vertical lines for life events."""
-    colors_event = ["#FF6B6B", "#FF9F1C", "#E63946", "#F4A261"]
-    notes: list[str] = []
-    note_number = note_start
+) -> list[tuple[int, str, str]]:
+    """Collect life events as (age, note, color)."""
+    colors_event = ["#FF9F1C", "#E63946", "#F4A261", "#C1121F"]
+    entries: list[tuple[int, str, str]] = []
 
     for event_index, event in enumerate(life_events):
         if isinstance(event, LumpSumEvent):
-            event_age = event.age
-            event_note = (
-                f"{note_number}. Lump sum withdrawal at age {event_age}: "
-                f"GBP{event.amount:,.0f}."
+            age = event.age
+            note = f"Lump sum withdrawal at age {age}: GBP{event.amount:,.0f}."
+        elif event.end_age is None:
+            age = event.start_age
+            note = (
+                f"Spending step from age {event.start_age}: "
+                f"+GBP{event.extra_per_year:,.0f}/year."
             )
         else:
-            event_age = event.start_age
-            if event.end_age is None:
-                event_note = (
-                    f"{note_number}. Spending step from age {event.start_age}: "
-                    f"+GBP{event.extra_per_year:,.0f}/year."
-                )
-            else:
-                event_note = (
-                    f"{note_number}. Spending step age {event.start_age} "
-                    f"to {event.end_age}: +GBP{event.extra_per_year:,.0f}/year."
-                )
-
-        if not (start_age <= event_age <= end_age):
-            continue
-
-        color = colors_event[event_index % len(colors_event)]
-        ax.axvline(
-            x=event_age,
-            color=color,
-            linestyle="--",
-            linewidth=2,
-            alpha=0.7,
-        )
-        if show_note_markers:
-            _draw_note_marker(
-                ax=ax,
-                age=event_age,
-                note_number=note_number,
-                slot=event_index,
-                color=color,
+            age = event.start_age
+            note = (
+                f"Spending step age {event.start_age} to {event.end_age}: "
+                f"+GBP{event.extra_per_year:,.0f}/year."
             )
-        notes.append(event_note)
-        note_number += 1
 
-    return notes, note_number
+        if start_age <= age <= end_age:
+            entries.append((age, note, colors_event[event_index % len(colors_event)]))
+
+    return entries
+
+
+def _build_all_event_entries(
+    secondary_dc_drawdown_age: int | None,
+    db_pensions: Sequence[DbPensionInput],
+    life_events: Sequence[LifeEvent],
+    start_age: int,
+    end_age: int,
+) -> list[tuple[int, str, str]]:
+    """Build the complete event list for annotation and notes."""
+    entries = _collect_standard_event_entries(
+        secondary_dc_drawdown_age=secondary_dc_drawdown_age,
+        db_pensions=db_pensions,
+        start_age=start_age,
+        end_age=end_age,
+    )
+    entries.extend(
+        _collect_life_event_entries(
+            life_events=life_events,
+            start_age=start_age,
+            end_age=end_age,
+        )
+    )
+    return entries
 
 
 def plot_pots_stacked_area(
@@ -282,22 +285,14 @@ def plot_pots_stacked_area(
         markersize=4,
     )
 
-    notes, next_note = add_event_lines_to_plot(
-        ax,
-        secondary_dc_drawdown_age,
-        db_pensions,
-        start_age,
-        end_age,
+    event_entries = _build_all_event_entries(
+        secondary_dc_drawdown_age=secondary_dc_drawdown_age,
+        db_pensions=db_pensions,
+        life_events=life_events,
+        start_age=start_age,
+        end_age=end_age,
     )
-    if len(life_events) > 0:
-        life_notes, _ = add_life_event_lines_to_plot(
-            ax,
-            life_events,
-            start_age,
-            end_age,
-            note_start=next_note,
-        )
-        notes.extend(life_notes)
+    notes = _draw_sorted_event_annotations(ax, event_entries, show_note_markers=True)
 
     ax.axhline(y=0, color="red", linestyle=":", linewidth=1.5, alpha=0.5)
     ax.set_xlabel("Age", fontsize=12, fontweight="bold")
@@ -314,6 +309,7 @@ def plot_pots_stacked_area(
     ax.yaxis.set_major_formatter(
         plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
     )
+    _apply_numeric_text_scale(ax)
 
     target = _to_output_path(output_file)
     _add_notes_box(fig, notes)
@@ -384,6 +380,7 @@ def plot_individual_pots_subplots(
     ax.yaxis.set_major_formatter(
         plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
     )
+    _apply_numeric_text_scale(ax)
 
     ax = axes[0, 1]
     ax.plot(ages, dc_balances, linewidth=3, color="#3498DB", marker="s", markersize=4)
@@ -394,6 +391,7 @@ def plot_individual_pots_subplots(
     ax.yaxis.set_major_formatter(
         plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
     )
+    _apply_numeric_text_scale(ax)
 
     ax = axes[1, 0]
     ax.plot(
@@ -412,6 +410,7 @@ def plot_individual_pots_subplots(
     ax.yaxis.set_major_formatter(
         plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
     )
+    _apply_numeric_text_scale(ax)
 
     ax = axes[1, 1]
     ax.plot(
@@ -442,6 +441,7 @@ def plot_individual_pots_subplots(
         ax_secondary.yaxis.set_major_formatter(
             plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
         )
+        _apply_numeric_text_scale(ax_secondary)
 
         lines1, labels1 = ax.get_legend_handles_labels()
         lines2, labels2 = ax_secondary.get_legend_handles_labels()
@@ -458,6 +458,7 @@ def plot_individual_pots_subplots(
     ax.yaxis.set_major_formatter(
         plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
     )
+    _apply_numeric_text_scale(ax)
 
     fig.suptitle(
         "Individual Pension Pots Evolution\n"
@@ -468,45 +469,25 @@ def plot_individual_pots_subplots(
         y=0.995,
     )
 
+    event_entries = _build_all_event_entries(
+        secondary_dc_drawdown_age=secondary_dc_drawdown_age,
+        db_pensions=db_pensions,
+        life_events=life_events,
+        start_age=start_age,
+        end_age=end_age,
+    )
+
     all_axes = [axes[0, 0], axes[0, 1], axes[1, 0], axes[1, 1]]
     notes_axis = axes[1, 1]
 
     for axis in all_axes:
         if axis is notes_axis:
             continue
-        add_event_lines_to_plot(
-            axis,
-            secondary_dc_drawdown_age,
-            db_pensions,
-            start_age,
-            end_age,
-            show_note_markers=False,
-        )
-        if len(life_events) > 0:
-            add_life_event_lines_to_plot(
-                axis,
-                life_events,
-                start_age,
-                end_age,
-                show_note_markers=False,
-            )
+        _draw_sorted_event_annotations(axis, event_entries, show_note_markers=False)
 
-    notes, next_note = add_event_lines_to_plot(
-        notes_axis,
-        secondary_dc_drawdown_age,
-        db_pensions,
-        start_age,
-        end_age,
+    notes = _draw_sorted_event_annotations(
+        notes_axis, event_entries, show_note_markers=True
     )
-    if len(life_events) > 0:
-        life_notes, _ = add_life_event_lines_to_plot(
-            notes_axis,
-            life_events,
-            start_age,
-            end_age,
-            note_start=next_note,
-        )
-        notes.extend(life_notes)
 
     _add_notes_box(fig, notes)
     if save_output:
@@ -629,22 +610,15 @@ def plot_sequence_of_returns_scenarios(
     ax.axhline(
         y=0, color="red", linestyle=":", linewidth=1.5, alpha=0.7, label="Zero balance"
     )
-    notes, next_note = add_event_lines_to_plot(
-        ax,
-        secondary_dc_drawdown_age,
-        db_pensions,
-        start_age,
-        end_age,
+
+    event_entries = _build_all_event_entries(
+        secondary_dc_drawdown_age=secondary_dc_drawdown_age,
+        db_pensions=db_pensions,
+        life_events=life_events,
+        start_age=start_age,
+        end_age=end_age,
     )
-    if len(life_events) > 0:
-        life_notes, _ = add_life_event_lines_to_plot(
-            ax,
-            life_events,
-            start_age,
-            end_age,
-            note_start=next_note,
-        )
-        notes.extend(life_notes)
+    notes = _draw_sorted_event_annotations(ax, event_entries, show_note_markers=True)
 
     ax.set_xlabel("Age", fontsize=12, fontweight="bold")
     ax.set_ylabel("Pension Balance (GBP)", fontsize=12, fontweight="bold")
@@ -659,6 +633,7 @@ def plot_sequence_of_returns_scenarios(
     ax.yaxis.set_major_formatter(
         plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
     )
+    _apply_numeric_text_scale(ax)
 
     _add_notes_box(fig, notes)
     if save_output:
@@ -739,22 +714,14 @@ def plot_monte_carlo_fan_chart(
         y=0, color="red", linestyle="--", linewidth=2, alpha=0.7, label="Zero balance"
     )
 
-    notes, next_note = add_event_lines_to_plot(
-        ax,
-        secondary_dc_drawdown_age,
-        db_pensions,
-        start_age,
-        end_age,
+    event_entries = _build_all_event_entries(
+        secondary_dc_drawdown_age=secondary_dc_drawdown_age,
+        db_pensions=db_pensions,
+        life_events=life_events,
+        start_age=start_age,
+        end_age=end_age,
     )
-    if len(life_events) > 0:
-        life_notes, _ = add_life_event_lines_to_plot(
-            ax,
-            life_events,
-            start_age,
-            end_age,
-            note_start=next_note,
-        )
-        notes.extend(life_notes)
+    notes = _draw_sorted_event_annotations(ax, event_entries, show_note_markers=True)
 
     ax.set_xlabel("Age", fontsize=12, fontweight="bold")
     ax.set_ylabel("Pension Balance (GBP)", fontsize=12, fontweight="bold")
@@ -773,6 +740,7 @@ def plot_monte_carlo_fan_chart(
     ax.yaxis.set_major_formatter(
         plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
     )
+    _apply_numeric_text_scale(ax)
 
     target = _to_output_path(output_file)
     _add_notes_box(fig, notes)
@@ -855,13 +823,15 @@ def plot_multiple_drawdown_levels(
     )
 
     ax.axhline(y=0, color="red", linestyle=":", linewidth=1.5, alpha=0.7)
-    notes, _ = add_event_lines_to_plot(
-        ax,
-        secondary_dc_drawdown_age,
-        db_pensions,
-        start_age,
-        end_age,
+
+    event_entries = _build_all_event_entries(
+        secondary_dc_drawdown_age=secondary_dc_drawdown_age,
+        db_pensions=db_pensions,
+        life_events=(),
+        start_age=start_age,
+        end_age=end_age,
     )
+    notes = _draw_sorted_event_annotations(ax, event_entries, show_note_markers=True)
 
     ax.set_xlabel("Age", fontsize=12, fontweight="bold")
     ax.set_ylabel("Pension Balance (GBP)", fontsize=12, fontweight="bold")
@@ -875,6 +845,7 @@ def plot_multiple_drawdown_levels(
     ax.yaxis.set_major_formatter(
         plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
     )
+    _apply_numeric_text_scale(ax)
 
     target = _to_output_path(output_file)
     _add_notes_box(fig, notes)
@@ -925,6 +896,7 @@ def plot_baseline_vs_scenario_balances(
     ax.yaxis.set_major_formatter(
         plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
     )
+    _apply_numeric_text_scale(ax)
 
     target = _to_output_path(output_file)
     fig.tight_layout()
