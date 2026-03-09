@@ -67,8 +67,9 @@ def run_life_events_comparison(output_dir: Path) -> None:
 
     baseline_spending = 30_000.0
     scenario_events = (
+        LumpSumEvent(age=55, amount=200_000.0),
         LumpSumEvent(age=70, amount=18_000.0),
-        SpendingStepEvent(start_age=78, extra_per_year=6_000.0),
+        SpendingStepEvent(start_age=78, extra_per_year=16_000.0),
     )
 
     baseline_required = build_required_withdrawals(
@@ -141,16 +142,28 @@ def run_life_events_comparison(output_dir: Path) -> None:
     scenario_metrics = summarize_path(scenario_balances)
 
     LOGGER.info("Life Events Comparison")
-    LOGGER.info(
-        "You added a one-off cost of GBP%.0f at age %d.",
-        scenario_events[0].amount,
-        scenario_events[0].age,
-    )
-    LOGGER.info(
-        "You added an ongoing extra GBP%.0f/year from age %d.",
-        scenario_events[1].extra_per_year,
-        scenario_events[1].start_age,
-    )
+    for event in scenario_events:
+        if isinstance(event, LumpSumEvent):
+            LOGGER.info(
+                "You added a one-off cost of %s at age %d.",
+                _format_gbp(event.amount),
+                event.age,
+            )
+            continue
+
+        if event.end_age is None:
+            LOGGER.info(
+                "You added an ongoing extra %s/year from age %d.",
+                _format_gbp(event.extra_per_year),
+                event.start_age,
+            )
+        else:
+            LOGGER.info(
+                "You added an extra %s/year from age %d to %d.",
+                _format_gbp(event.extra_per_year),
+                event.start_age,
+                event.end_age,
+            )
     LOGGER.info(
         "Baseline ending balance: GBP%.0f | Scenario ending balance: GBP%.0f",
         baseline_metrics.ending_balance,
