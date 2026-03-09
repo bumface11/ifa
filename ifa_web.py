@@ -225,17 +225,26 @@ def main() -> None:
 
     tax_free_pot = float(
         st.sidebar.number_input(
-            "Tax-free pot GBP", min_value=0.0, value=INITIAL_TAX_FREE_POT, step=1_000.0
+            "Tax-free pot GBP",
+            min_value=0.0,
+            value=float(INITIAL_TAX_FREE_POT),
+            step=1_000.0,
         )
     )
     main_dc_pot = float(
         st.sidebar.number_input(
-            "Main DC pot GBP", min_value=0.0, value=INITIAL_DC_POT, step=1_000.0
+            "Main DC pot GBP",
+            min_value=0.0,
+            value=float(INITIAL_DC_POT),
+            step=1_000.0,
         )
     )
     secondary_dc_pot = float(
         st.sidebar.number_input(
-            "Secondary DC pot GBP", min_value=0.0, value=SECONDARY_DC_POT, step=1_000.0
+            "Secondary DC pot GBP",
+            min_value=0.0,
+            value=float(SECONDARY_DC_POT),
+            step=1_000.0,
         )
     )
     use_secondary = st.sidebar.checkbox("Use secondary DC drawdown age", value=True)
