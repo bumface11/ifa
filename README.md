@@ -5,23 +5,49 @@ DB pension income, and life events can change a retirement plan.
 
 ## Quick Start
 
-Install dependencies in your environment:
+### Windows 11 (Recommended)
+
+Create and activate a virtual environment:
 
 ```bash
-uv sync
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+Install dependencies with pip:
+
+```bash
+python -m pip install -e .
 ```
 
 Run the CLI simulator and save charts to `output/`:
 
 ```bash
-uv run python pension_drawdown_simulator.py
+python pension_drawdown_simulator.py
 ```
 
 Run the Streamlit app:
 
 ```bash
+streamlit run ifa_web.py
+```
+
+### Optional: uv Workflow
+
+If you prefer `uv`, these commands are equivalent:
+
+```bash
+uv sync
+uv run python pension_drawdown_simulator.py
 uv run streamlit run ifa_web.py
 ```
+
+## Documentation
+
+- Getting started guide: `docs/START_HERE.md`
+- Project structure and data flow: `docs/ARCHITECTURE.md`
+- Import and dependency diagrams: `docs/DEPENDENCIES.md`
+
 
 ## Life Events
 
@@ -29,7 +55,7 @@ Life events model real-world spending changes in simple terms:
 
 - `LumpSumEvent(age, amount)`: one-off extra spending at one age.
 - `SpendingStepEvent(start_age, extra_per_year, end_age=None)`: ongoing extra
-	yearly spending from a start age.
+  yearly spending from a start age.
 
 Examples:
 
@@ -51,4 +77,4 @@ the same return path so the impact is easier to understand.
 
 - CLI saves charts to `output/` by default.
 - Streamlit can optionally save its generated charts to `output/` using the
-	sidebar checkbox.
+  sidebar checkbox.
