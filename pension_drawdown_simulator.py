@@ -7,6 +7,7 @@ return scenarios. Calculations are in real (inflation-adjusted) terms.
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -33,7 +34,7 @@ from ifa.engine import (
 from ifa.events import build_required_withdrawals
 from ifa.market import generate_random_returns
 from ifa.metrics import summarize_monte_carlo, summarize_path
-from ifa.models import LumpSumEvent, SpendingStepEvent
+from ifa.models import LifeEvent, LumpSumEvent, SpendingStepEvent
 from ifa.plotting import (
     plot_baseline_vs_scenario_balances,
     plot_individual_pots_subplots,
@@ -45,6 +46,12 @@ from ifa.plotting import (
 from ifa.strategies import create_db_aware_strategy, create_fixed_real_drawdown_strategy
 
 LOGGER = logging.getLogger(__name__)
+
+BASELINE_SPENDING = 30_000.0
+SCENARIO_EVENTS: tuple[LifeEvent, ...] = (
+    LumpSumEvent(age=55, amount=200_000.0),
+    SpendingStepEvent(start_age=70, extra_per_year=24_000.0),
+)
 
 
 def _format_gbp(amount: float) -> str:
@@ -60,29 +67,36 @@ def _build_db_income_by_age(ages: np.ndarray) -> np.ndarray:
     )
 
 
-def run_life_events_comparison(output_dir: Path) -> None:
-    """Run and plot baseline vs life-events scenario on the same returns path."""
+def _build_required_withdrawals_for_events(
+    baseline_spending: float,
+    events: Sequence[LifeEvent],
+) -> np.ndarray:
+    """Build pot-withdrawal needs from baseline spending and life events.
+
+    This schedule already nets off DB income to avoid double-counting.
+    """
     ages = np.arange(START_AGE, END_AGE + 1, dtype=np.int_)
     db_income = _build_db_income_by_age(ages)
-
-    baseline_spending = 30_000.0
-    scenario_events = (
-        LumpSumEvent(age=55, amount=200_000.0),
-        LumpSumEvent(age=60, amount=40_000.0),
-        SpendingStepEvent(start_age=78, extra_per_year=16_000.0),
-        SpendingStepEvent(start_age=70, extra_per_year=4_000.0),
-    )
-
-    baseline_required = build_required_withdrawals(
+    return build_required_withdrawals(
         ages=ages,
         baseline_spending=baseline_spending,
         db_income=db_income,
+        events=events,
+    )
+
+
+def run_life_events_comparison(
+    output_dir: Path,
+    baseline_spending: float,
+    scenario_events: Sequence[LifeEvent],
+) -> None:
+    """Run and plot baseline vs life-events scenario on the same returns path."""
+    baseline_required = _build_required_withdrawals_for_events(
+        baseline_spending=baseline_spending,
         events=(),
     )
-    scenario_required = build_required_withdrawals(
-        ages=ages,
+    scenario_required = _build_required_withdrawals_for_events(
         baseline_spending=baseline_spending,
-        db_income=db_income,
         events=scenario_events,
     )
 
@@ -210,6 +224,10 @@ def main() -> None:
     LOGGER.info("1. Running sequence-of-returns scenarios...")
     base_strategy = create_fixed_real_drawdown_strategy(18_000)
     strategy = create_db_aware_strategy(base_strategy, DB_PENSIONS)
+    scenario_required = _build_required_withdrawals_for_events(
+        baseline_spending=BASELINE_SPENDING,
+        events=SCENARIO_EVENTS,
+    )
     plot_sequence_of_returns_scenarios(
         INITIAL_TAX_FREE_POT,
         INITIAL_DC_POT,
@@ -221,6 +239,8 @@ def main() -> None:
         MEAN_RETURN,
         STD_RETURN,
         strategy,
+        withdrawals_required=scenario_required,
+        life_events=SCENARIO_EVENTS,
         output_file=output_dir / "sequence_scenarios.png",
     )
     LOGGER.info("")
@@ -239,6 +259,8 @@ def main() -> None:
         strategy,
         NUM_SIMULATIONS,
         RANDOM_SEED,
+        withdrawals_required=scenario_required,
+        life_events=SCENARIO_EVENTS,
         output_file=output_dir / "monte_carlo_fan.png",
     )
     LOGGER.info("")
@@ -255,6 +277,7 @@ def main() -> None:
         strategy_fn=strategy,
         num_simulations=NUM_SIMULATIONS,
         seed=RANDOM_SEED,
+        withdrawals_required=scenario_required,
     )
     mc_metrics = summarize_monte_carlo(monte_carlo_paths)
     LOGGER.info(
@@ -297,6 +320,8 @@ def main() -> None:
         STD_RETURN,
         strategy,
         RANDOM_SEED,
+        withdrawals_required=scenario_required,
+        life_events=SCENARIO_EVENTS,
         output_file=output_dir / "pots_stacked_area.png",
     )
     LOGGER.info("")
@@ -314,12 +339,18 @@ def main() -> None:
         STD_RETURN,
         strategy,
         RANDOM_SEED,
+        withdrawals_required=scenario_required,
+        life_events=SCENARIO_EVENTS,
         output_file=output_dir / "pots_individual.png",
     )
     LOGGER.info("")
 
     LOGGER.info("6. Running life-events baseline vs scenario comparison...")
-    run_life_events_comparison(output_dir)
+    run_life_events_comparison(
+        output_dir=output_dir,
+        baseline_spending=BASELINE_SPENDING,
+        scenario_events=SCENARIO_EVENTS,
+    )
     LOGGER.info("")
 
     LOGGER.info("%s", "=" * 80)

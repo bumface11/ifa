@@ -15,7 +15,7 @@ from ifa.engine import (
     simulate_multi_pot_pension_path,
 )
 from ifa.market import generate_deterministic_sequences, generate_random_returns
-from ifa.models import DbPension
+from ifa.models import DbPension, LifeEvent, LumpSumEvent
 from ifa.strategies import (
     DrawdownFn,
     create_db_aware_strategy,
@@ -87,6 +87,58 @@ def add_event_lines_to_plot(
             event_index += 1
 
 
+def add_life_event_lines_to_plot(
+    ax: plt.Axes,
+    life_events: Sequence[LifeEvent],
+    start_age: int,
+    end_age: int,
+) -> None:
+    """Add vertical markers for life events to keep charts educational."""
+    colors_event = ["#FF6B6B", "#FF9F1C", "#E63946", "#F4A261"]
+    y_top = ax.get_ylim()[1]
+
+    for event_index, event in enumerate(life_events):
+        if isinstance(event, LumpSumEvent):
+            event_age = event.age
+            event_label = (
+                f"Lump sum\\nGBP{event.amount / 1000:.0f}k\\n(age {event_age})"
+            )
+        else:
+            event_age = event.start_age
+            if event.end_age is None:
+                event_label = (
+                    "Spending step\\n"
+                    f"+GBP{event.extra_per_year / 1000:.0f}k/yr\\n"
+                    f"from {event.start_age}"
+                )
+            else:
+                event_label = (
+                    "Spending step\\n"
+                    f"+GBP{event.extra_per_year / 1000:.0f}k/yr\\n"
+                    f"{event.start_age}-{event.end_age}"
+                )
+
+        if not (start_age <= event_age <= end_age):
+            continue
+
+        y_position = y_top * (0.85 - 0.07 * (event_index % 3))
+        ax.axvline(
+            x=event_age,
+            color=colors_event[event_index % len(colors_event)],
+            linestyle="--",
+            linewidth=2,
+            alpha=0.7,
+        )
+        ax.text(
+            event_age,
+            y_position,
+            event_label,
+            fontsize=8,
+            ha="center",
+            bbox={"boxstyle": "round", "facecolor": "mistyrose", "alpha": 0.7},
+        )
+
+
 def plot_pots_stacked_area(
     tax_free_pot: float,
     dc_pot: float,
@@ -99,6 +151,8 @@ def plot_pots_stacked_area(
     std_return: float,
     strategy_fn: DrawdownFn,
     seed: int,
+    withdrawals_required: np.ndarray | None = None,
+    life_events: Sequence[LifeEvent] = (),
     output_file: str | Path = "pots_stacked_area.png",
 ) -> None:
     """Plot stacked pot composition over time."""
@@ -122,7 +176,8 @@ def plot_pots_stacked_area(
         start_age,
         end_age,
         returns,
-        strategy_fn,
+        strategy_fn if withdrawals_required is None else None,
+        withdrawals_required=withdrawals_required,
     )
 
     fig, ax = plt.subplots(figsize=(14, 8))
@@ -160,13 +215,16 @@ def plot_pots_stacked_area(
     add_event_lines_to_plot(
         ax, secondary_dc_drawdown_age, db_pensions, start_age, end_age
     )
+    if len(life_events) > 0:
+        add_life_event_lines_to_plot(ax, life_events, start_age, end_age)
 
     ax.axhline(y=0, color="red", linestyle=":", linewidth=1.5, alpha=0.5)
     ax.set_xlabel("Age", fontsize=12, fontweight="bold")
     ax.set_ylabel("Pot Balance (GBP)", fontsize=12, fontweight="bold")
+    title_suffix = "Life events active" if len(life_events) > 0 else "No life events"
     ax.set_title(
         "Pension Pot Composition Over Time\n"
-        "(Stacked Area - Individual Pot Contribution)",
+        f"(Stacked Area - Individual Pot Contribution, {title_suffix})",
         fontsize=14,
         fontweight="bold",
     )
@@ -195,6 +253,8 @@ def plot_individual_pots_subplots(
     std_return: float,
     strategy_fn: DrawdownFn,
     seed: int,
+    withdrawals_required: np.ndarray | None = None,
+    life_events: Sequence[LifeEvent] = (),
     output_file: str | Path = "pots_individual.png",
 ) -> None:
     """Plot individual pot trajectories in four panels."""
@@ -218,7 +278,8 @@ def plot_individual_pots_subplots(
         start_age,
         end_age,
         returns,
-        strategy_fn,
+        strategy_fn if withdrawals_required is None else None,
+        withdrawals_required=withdrawals_required,
     )
 
     fig, axes = plt.subplots(2, 2, figsize=(15, 10))
@@ -329,11 +390,16 @@ def plot_individual_pots_subplots(
 
     fig.suptitle(
         "Individual Pension Pots Evolution\n"
-        "(DB pension income shown on secondary axis, right plot)",
+        "(DB pension income shown on secondary axis, right plot; "
+        f"{'life events active' if len(life_events) > 0 else 'no life events'})",
         fontsize=14,
         fontweight="bold",
         y=0.995,
     )
+
+    if len(life_events) > 0:
+        for axis in [axes[0, 0], axes[0, 1], axes[1, 0], axes[1, 1]]:
+            add_life_event_lines_to_plot(axis, life_events, start_age, end_age)
 
     target = _to_output_path(output_file)
     plt.tight_layout()
@@ -353,6 +419,8 @@ def plot_sequence_of_returns_scenarios(
     mean_return: float,
     std_return: float,
     strategy_fn: DrawdownFn,
+    withdrawals_required: np.ndarray | None = None,
+    life_events: Sequence[LifeEvent] = (),
     output_file: str | Path = "sequence_scenarios.png",
 ) -> None:
     """Plot deterministic sequence-of-returns scenarios plus baseline."""
@@ -370,7 +438,8 @@ def plot_sequence_of_returns_scenarios(
         start_age,
         end_age,
         early_bad,
-        strategy_fn,
+        strategy_fn if withdrawals_required is None else None,
+        withdrawals_required=withdrawals_required,
     )
     _, balances_early_good, *_ = simulate_multi_pot_pension_path(
         tax_free_pot,
@@ -381,7 +450,8 @@ def plot_sequence_of_returns_scenarios(
         start_age,
         end_age,
         early_good,
-        strategy_fn,
+        strategy_fn if withdrawals_required is None else None,
+        withdrawals_required=withdrawals_required,
     )
     _, balances_constant, *_ = simulate_multi_pot_pension_path(
         tax_free_pot,
@@ -392,7 +462,8 @@ def plot_sequence_of_returns_scenarios(
         start_age,
         end_age,
         constant,
-        strategy_fn,
+        strategy_fn if withdrawals_required is None else None,
+        withdrawals_required=withdrawals_required,
     )
     _, balances_no_withdrawal, *_ = simulate_multi_pot_pension_path(
         tax_free_pot,
@@ -448,11 +519,14 @@ def plot_sequence_of_returns_scenarios(
     add_event_lines_to_plot(
         ax, secondary_dc_drawdown_age, db_pensions, start_age, end_age
     )
+    if len(life_events) > 0:
+        add_life_event_lines_to_plot(ax, life_events, start_age, end_age)
 
     ax.set_xlabel("Age", fontsize=12, fontweight="bold")
     ax.set_ylabel("Pension Balance (GBP)", fontsize=12, fontweight="bold")
+    title_suffix = "Life events active" if len(life_events) > 0 else "No life events"
     ax.set_title(
-        "Pension Drawdown: Sequence-of-Returns Scenarios",
+        f"Pension Drawdown: Sequence-of-Returns Scenarios ({title_suffix})",
         fontsize=14,
         fontweight="bold",
     )
@@ -482,6 +556,8 @@ def plot_monte_carlo_fan_chart(
     strategy_fn: DrawdownFn,
     num_simulations: int,
     seed: int,
+    withdrawals_required: np.ndarray | None = None,
+    life_events: Sequence[LifeEvent] = (),
     output_file: str | Path = "monte_carlo_fan.png",
 ) -> None:
     """Plot a Monte Carlo fan chart with percentile bands."""
@@ -498,6 +574,7 @@ def plot_monte_carlo_fan_chart(
         strategy_fn,
         num_simulations,
         seed,
+        withdrawals_required=withdrawals_required,
     )
 
     p10 = np.percentile(paths, 10, axis=0)
@@ -535,10 +612,16 @@ def plot_monte_carlo_fan_chart(
     add_event_lines_to_plot(
         ax, secondary_dc_drawdown_age, db_pensions, start_age, end_age
     )
+    if len(life_events) > 0:
+        add_life_event_lines_to_plot(ax, life_events, start_age, end_age)
 
     ax.set_xlabel("Age", fontsize=12, fontweight="bold")
     ax.set_ylabel("Pension Balance (GBP)", fontsize=12, fontweight="bold")
-    title = f"Monte Carlo Pension Projection ({num_simulations} simulations)"
+    title_suffix = "Life events active" if len(life_events) > 0 else "No life events"
+    title = (
+        f"Monte Carlo Pension Projection ({num_simulations} simulations, "
+        f"{title_suffix})"
+    )
     if zero_pct > 0:
         title += (
             f"\n({zero_pct:.1f}% of simulations exhausted pot before age {end_age})"
