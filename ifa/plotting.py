@@ -8,6 +8,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.figure import Figure
 
 from ifa.engine import (
     DbPensionInput,
@@ -153,8 +154,10 @@ def plot_pots_stacked_area(
     seed: int,
     withdrawals_required: np.ndarray | None = None,
     life_events: Sequence[LifeEvent] = (),
+    save_output: bool = True,
+    return_figure: bool = False,
     output_file: str | Path = "pots_stacked_area.png",
-) -> None:
+) -> Figure | None:
     """Plot stacked pot composition over time."""
     num_years = end_age - start_age
     returns = generate_random_returns(num_years, mean_return, std_return, seed)
@@ -236,9 +239,13 @@ def plot_pots_stacked_area(
 
     target = _to_output_path(output_file)
     plt.tight_layout()
-    plt.savefig(target, dpi=150, bbox_inches="tight")
-    LOGGER.info("Saved: %s", target)
+    if save_output:
+        plt.savefig(target, dpi=150, bbox_inches="tight")
+        LOGGER.info("Saved: %s", target)
+    if return_figure:
+        return fig
     plt.close()
+    return None
 
 
 def plot_individual_pots_subplots(
@@ -255,8 +262,10 @@ def plot_individual_pots_subplots(
     seed: int,
     withdrawals_required: np.ndarray | None = None,
     life_events: Sequence[LifeEvent] = (),
+    save_output: bool = True,
+    return_figure: bool = False,
     output_file: str | Path = "pots_individual.png",
-) -> None:
+) -> Figure | None:
     """Plot individual pot trajectories in four panels."""
     num_years = end_age - start_age
     returns = generate_random_returns(num_years, mean_return, std_return, seed)
@@ -401,11 +410,15 @@ def plot_individual_pots_subplots(
         for axis in [axes[0, 0], axes[0, 1], axes[1, 0], axes[1, 1]]:
             add_life_event_lines_to_plot(axis, life_events, start_age, end_age)
 
-    target = _to_output_path(output_file)
     plt.tight_layout()
-    plt.savefig(target, dpi=150, bbox_inches="tight")
-    LOGGER.info("Saved: %s", target)
+    if save_output:
+        target = _to_output_path(output_file)
+        plt.savefig(target, dpi=150, bbox_inches="tight")
+        LOGGER.info("Saved: %s", target)
+    if return_figure:
+        return fig
     plt.close()
+    return None
 
 
 def plot_sequence_of_returns_scenarios(
@@ -421,8 +434,10 @@ def plot_sequence_of_returns_scenarios(
     strategy_fn: DrawdownFn,
     withdrawals_required: np.ndarray | None = None,
     life_events: Sequence[LifeEvent] = (),
+    save_output: bool = True,
+    return_figure: bool = False,
     output_file: str | Path = "sequence_scenarios.png",
-) -> None:
+) -> Figure | None:
     """Plot deterministic sequence-of-returns scenarios plus baseline."""
     num_years = end_age - start_age
     early_bad, early_good, constant = generate_deterministic_sequences(
@@ -536,11 +551,15 @@ def plot_sequence_of_returns_scenarios(
         plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
     )
 
-    target = _to_output_path(output_file)
     plt.tight_layout()
-    plt.savefig(target, dpi=150, bbox_inches="tight")
-    LOGGER.info("Saved: %s", target)
+    if save_output:
+        target = _to_output_path(output_file)
+        plt.savefig(target, dpi=150, bbox_inches="tight")
+        LOGGER.info("Saved: %s", target)
+    if return_figure:
+        return fig
     plt.close()
+    return None
 
 
 def plot_monte_carlo_fan_chart(
@@ -558,8 +577,10 @@ def plot_monte_carlo_fan_chart(
     seed: int,
     withdrawals_required: np.ndarray | None = None,
     life_events: Sequence[LifeEvent] = (),
+    save_output: bool = True,
+    return_figure: bool = False,
     output_file: str | Path = "monte_carlo_fan.png",
-) -> None:
+) -> Figure | None:
     """Plot a Monte Carlo fan chart with percentile bands."""
     ages, paths = run_monte_carlo_simulation(
         tax_free_pot,
@@ -635,10 +656,14 @@ def plot_monte_carlo_fan_chart(
 
     target = _to_output_path(output_file)
     plt.tight_layout()
-    plt.savefig(target, dpi=150, bbox_inches="tight")
-    LOGGER.info("Saved: %s", target)
+    if save_output:
+        plt.savefig(target, dpi=150, bbox_inches="tight")
+        LOGGER.info("Saved: %s", target)
     LOGGER.info("Risk metric: %.1f%% of simulations ran out of money.", zero_pct)
+    if return_figure:
+        return fig
     plt.close()
+    return None
 
 
 def plot_multiple_drawdown_levels(
@@ -738,8 +763,10 @@ def plot_baseline_vs_scenario_balances(
     ages: np.ndarray,
     baseline_balances: np.ndarray,
     scenario_balances: np.ndarray,
+    save_output: bool = True,
+    return_figure: bool = False,
     output_file: str | Path = "baseline_vs_scenario.png",
-) -> None:
+) -> Figure | None:
     """Plot baseline and life-event scenario balances on one comparison chart."""
     fig, ax = plt.subplots(figsize=(12, 7))
     ax.plot(
@@ -777,6 +804,10 @@ def plot_baseline_vs_scenario_balances(
 
     target = _to_output_path(output_file)
     plt.tight_layout()
-    plt.savefig(target, dpi=150, bbox_inches="tight")
-    LOGGER.info("Saved: %s", target)
+    if save_output:
+        plt.savefig(target, dpi=150, bbox_inches="tight")
+        LOGGER.info("Saved: %s", target)
+    if return_figure:
+        return fig
     plt.close()
+    return None

@@ -83,8 +83,8 @@ def deterministic_presets(
 
     return {
         "Typical": typical,
-        "Bad start": early_bad,
-        "Good start": early_good,
+        "Early bad": early_bad,
+        "Early good": early_good,
         "Constant": constant,
     }
 

@@ -7,6 +7,7 @@ dependencies = [
     "matplotlib>=3.9",
     "numpy>=2.2",
     "pandas>=2.2",
+    "streamlit>=1.40",
 ]
 
 [tool.pytest.ini_options]
