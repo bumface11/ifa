@@ -1,5 +1,16 @@
-"""Simulation module scaffold."""
+"""Backward-compatible simulation module.
 
-from __future__ import annotations
+This module re-exports engine functions for compatibility during migration.
+"""
 
-# Phase 1 placeholder: simulation logic remains in pension_drawdown_simulator.py.
+from ifa.engine import (
+    calculate_db_pension_income,
+    run_monte_carlo_simulation,
+    simulate_multi_pot_pension_path,
+)
+
+__all__ = [
+    "calculate_db_pension_income",
+    "simulate_multi_pot_pension_path",
+    "run_monte_carlo_simulation",
+]
