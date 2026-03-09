@@ -78,6 +78,10 @@ the same return path so the impact is easier to understand.
 - Compact metrics styling for easier viewing on smaller laptop screens.
 - Collapsible sidebar sections for DB pensions and life events to reduce
   scrolling in the control panel.
+- Theme-aware text styling so sidebar labels and expand/collapse controls stay
+  readable in dark mode.
+- Streamlit theme-variable-based styling so both text contrast and background
+  update consistently across main content and sidebar when switching themes.
 
 ## Output Files
 

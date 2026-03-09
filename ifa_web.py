@@ -203,22 +203,17 @@ def main() -> None:
         """
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Chivo:wght@400;700&family=Fraunces:opsz,wght@9..144,600&display=swap');
-        :root {
-            --ifa-text: #1f2937;
-            --ifa-heading: #0f2d3a;
-            --ifa-muted: #344054;
-        }
         html, body, [class*="css"]  {
             font-family: "Chivo", sans-serif;
-            color: var(--ifa-text);
+            color: var(--text-color) !important;
         }
         h1, h2, h3 {
             font-family: "Fraunces", serif;
             letter-spacing: 0.3px;
-            color: var(--ifa-heading);
+            color: var(--text-color) !important;
         }
         p, li, label, span, .stCaption {
-            color: var(--ifa-text);
+            color: var(--text-color) !important;
         }
         [data-testid="stSidebar"] p,
         [data-testid="stSidebar"] li,
@@ -227,11 +222,23 @@ def main() -> None:
         [data-testid="stSidebar"] h1,
         [data-testid="stSidebar"] h2,
         [data-testid="stSidebar"] h3 {
-            color: var(--ifa-text);
+            color: var(--text-color) !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stExpander"] summary,
+        [data-testid="stSidebar"] [data-testid="stExpander"] summary *,
+        [data-testid="stSidebar"] details summary,
+        [data-testid="stSidebar"] details summary *,
+        [data-testid="stSidebar"] button,
+        [data-testid="stSidebar"] button *,
+        [data-testid="stSidebar"] svg,
+        [data-testid="stSidebar"] summary svg {
+            color: var(--text-color) !important;
+            fill: currentColor !important;
+            stroke: currentColor !important;
         }
         [data-testid="stMetricLabel"],
         [data-testid="stMetricValue"] {
-            color: var(--ifa-heading);
+            color: var(--text-color) !important;
         }
         [data-testid="stMetricValue"] {
             font-size: 1.55rem;
@@ -241,15 +248,15 @@ def main() -> None:
             font-size: 0.95rem;
         }
         .stMarkdown small {
-            color: var(--ifa-muted);
+            color: var(--text-color) !important;
+            opacity: 0.85;
         }
         .stApp {
-            background: radial-gradient(
-                circle at 20% 15%,
-                #fff7df 0%,
-                #f6fbff 45%,
-                #eef6f2 100%
-            );
+            background: linear-gradient(
+                160deg,
+                var(--background-color) 0%,
+                var(--secondary-background-color) 100%
+            ) !important;
         }
         </style>
         """,
