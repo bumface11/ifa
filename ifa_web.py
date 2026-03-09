@@ -59,7 +59,13 @@ def _build_life_events(
 
     st.sidebar.markdown("### Life Events")
     lump_count = int(
-        st.sidebar.number_input("Lump-sum events", min_value=0, max_value=5, value=1)
+        st.sidebar.number_input(
+            "Lump-sum events",
+            min_value=0,
+            max_value=5,
+            value=1,
+            help="How many one-off spending events you want to model.",
+        )
     )
     for index in range(lump_count):
         st.sidebar.markdown(f"Lump sum #{index + 1}")
@@ -70,6 +76,7 @@ def _build_life_events(
                 max_value=end_age,
                 value=min(start_age + 3 + index, end_age),
                 key=f"lump_age_{index}",
+                help="The age when this one-off cost happens.",
             )
         )
         lump_amount = float(
@@ -79,6 +86,7 @@ def _build_life_events(
                 value=18_000.0,
                 step=1_000.0,
                 key=f"lump_amount_{index}",
+                help="Amount of this one-off extra cost in GBP.",
             )
         )
         if lump_amount > 0.0:
@@ -86,7 +94,11 @@ def _build_life_events(
 
     step_count = int(
         st.sidebar.number_input(
-            "Spending-step events", min_value=0, max_value=5, value=1
+            "Spending-step events",
+            min_value=0,
+            max_value=5,
+            value=1,
+            help="How many ongoing extra yearly costs you want to model.",
         )
     )
     for index in range(step_count):
@@ -98,6 +110,7 @@ def _build_life_events(
                 max_value=end_age,
                 value=min(start_age + 10 + index, end_age),
                 key=f"step_start_{index}",
+                help="The age when this ongoing extra cost starts.",
             )
         )
         step_amount = float(
@@ -107,12 +120,14 @@ def _build_life_events(
                 value=6_000.0,
                 step=500.0,
                 key=f"step_amount_{index}",
+                help="Extra spending per year in GBP for this step event.",
             )
         )
         has_end = st.sidebar.checkbox(
             f"Set end age (step #{index + 1})",
             value=False,
             key=f"step_has_end_{index}",
+            help="Enable this if the extra yearly cost should stop at a later age.",
         )
         step_end = None
         if has_end:
@@ -123,6 +138,7 @@ def _build_life_events(
                     max_value=end_age,
                     value=end_age,
                     key=f"step_end_{index}",
+                    help="The last age this extra yearly cost applies.",
                 )
             )
 
@@ -148,6 +164,7 @@ def _build_db_pensions(start_age: int, end_age: int) -> list[tuple[int, float]]:
             min_value=0,
             max_value=6,
             value=default_streams,
+            help="How many defined-benefit pension income streams you receive.",
         )
     )
     pensions: list[tuple[int, float]] = []
@@ -161,6 +178,7 @@ def _build_db_pensions(start_age: int, end_age: int) -> list[tuple[int, float]]:
                 max_value=end_age,
                 value=default_age,
                 key=f"db_age_{index}",
+                help="The age when this DB pension income starts.",
             )
         )
         stream_amount = float(
@@ -170,6 +188,7 @@ def _build_db_pensions(start_age: int, end_age: int) -> list[tuple[int, float]]:
                 value=float(default_amount),
                 step=500.0,
                 key=f"db_amount_{index}",
+                help="Yearly income amount for this DB pension stream in GBP.",
             )
         )
         pensions.append((stream_age, stream_amount))
@@ -265,6 +284,10 @@ def main() -> None:
             min_value=0.0,
             value=30_000.0,
             step=1_000.0,
+            help=(
+                "Your planned yearly spending in today's money before adding "
+                "life events."
+            ),
         )
     )
 
@@ -277,6 +300,10 @@ def main() -> None:
             value=MEAN_RETURN,
             step=0.005,
             format="%.3f",
+            help=(
+                "Expected average yearly investment return after inflation. "
+                "Example: 0.04 means 4%."
+            ),
         )
     )
     std_return = float(
@@ -287,10 +314,22 @@ def main() -> None:
             value=STD_RETURN,
             step=0.005,
             format="%.3f",
+            help=(
+                "How much returns can swing up and down each year. "
+                "Higher means more uncertainty."
+            ),
         )
     )
     random_seed = int(
-        st.sidebar.number_input("Random seed", min_value=0, value=RANDOM_SEED)
+        st.sidebar.number_input(
+            "Random seed",
+            min_value=0,
+            value=RANDOM_SEED,
+            help=(
+                "A fixed number that makes random scenarios repeatable so you "
+                "can compare changes fairly."
+            ),
+        )
     )
     num_simulations = int(
         st.sidebar.number_input(
@@ -299,6 +338,10 @@ def main() -> None:
             max_value=10_000,
             value=NUM_SIMULATIONS,
             step=100,
+            help=(
+                "How many random market paths to test. More paths give a more "
+                "stable estimate but run slower."
+            ),
         )
     )
 

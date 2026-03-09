@@ -52,6 +52,14 @@ If the code is not fully optimized before handing off to the user, you will be f
 - Keep comments up-to-date with code changes
 - Include examples in docstrings for complex functions
 
+## Documentation Sync
+
+- **MUST** keep repository documentation in sync with code changes.
+- For user-facing behavior changes, update `README.md` in the same change.
+- For structural or data-flow changes, update `docs/ARCHITECTURE.md`.
+- For import/dependency changes, update `docs/DEPENDENCIES.md` and `pyproject.toml`.
+- If Python files change in a pull request, at least one of `README.md`, `docs/ARCHITECTURE.md`, or `docs/DEPENDENCIES.md` must also be updated unless the pull request clearly documents why not.
+
 Example docstring:
 
 ```python

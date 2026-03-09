@@ -1,0 +1,28 @@
+name: docs-sync
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  verify-doc-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            python:
+              - '**/*.py'
+            docs:
+              - 'README.md'
+              - 'docs/ARCHITECTURE.md'
+              - 'docs/DEPENDENCIES.md'
+
+      - name: Enforce docs update when Python changes
+        if: steps.filter.outputs.python == 'true' && steps.filter.outputs.docs != 'true'
+        run: |
+          echo "Python files changed, but no required docs were updated."
+          echo "Update at least one of: README.md, docs/ARCHITECTURE.md, docs/DEPENDENCIES.md"
+          exit 1
