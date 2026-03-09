@@ -762,6 +762,9 @@ def main():
     print(f"  Mean real return: {MEAN_RETURN*100:.1f}%")
     print(f"  Std dev: {STD_RETURN*100:.1f}%")
     print(f"  Random seed: {RANDOM_SEED}\n")
+
+    output_dir = Path("output")
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     # 1. Sequence-of-returns scenario (fixed real drawdown at £18k from DC, DB-aware)
     print("1. Running sequence-of-returns scenarios...")
@@ -769,7 +772,8 @@ def main():
     strategy = create_db_aware_strategy(base_strategy, DB_PENSIONS)
     plot_sequence_of_returns_scenarios(
         INITIAL_TAX_FREE_POT, INITIAL_DC_POT, SECONDARY_DC_POT, SECONDARY_DC_DRAWDOWN_AGE,
-        DB_PENSIONS, START_AGE, END_AGE, MEAN_RETURN, STD_RETURN, strategy
+        DB_PENSIONS, START_AGE, END_AGE, MEAN_RETURN, STD_RETURN, strategy,
+        output_file=output_dir / "sequence_scenarios.png"
     )
     print()
     
@@ -778,7 +782,8 @@ def main():
     plot_monte_carlo_fan_chart(
         INITIAL_TAX_FREE_POT, INITIAL_DC_POT, SECONDARY_DC_POT, SECONDARY_DC_DRAWDOWN_AGE,
         DB_PENSIONS, START_AGE, END_AGE, MEAN_RETURN, STD_RETURN, strategy,
-        NUM_SIMULATIONS, RANDOM_SEED
+        NUM_SIMULATIONS, RANDOM_SEED,
+        output_file=output_dir / "monte_carlo_fan.png"
     )
     print()
     
@@ -787,7 +792,8 @@ def main():
     plot_multiple_drawdown_levels(
         INITIAL_TAX_FREE_POT, INITIAL_DC_POT, SECONDARY_DC_POT, SECONDARY_DC_DRAWDOWN_AGE,
         DB_PENSIONS, START_AGE, END_AGE, MEAN_RETURN, STD_RETURN,
-        ANNUAL_DRAWDOWNS, RANDOM_SEED
+        ANNUAL_DRAWDOWNS, RANDOM_SEED,
+        output_file=output_dir / "multiple_drawdowns.png"
     )
     print()
     
@@ -796,7 +802,8 @@ def main():
     plot_pots_stacked_area(
         INITIAL_TAX_FREE_POT, INITIAL_DC_POT, SECONDARY_DC_POT, SECONDARY_DC_DRAWDOWN_AGE,
         DB_PENSIONS, START_AGE, END_AGE, MEAN_RETURN, STD_RETURN, strategy,
-        RANDOM_SEED
+        RANDOM_SEED,
+        output_file=output_dir / "pots_stacked_area.png"
     )
     print()
     
@@ -805,12 +812,13 @@ def main():
     plot_individual_pots_subplots(
         INITIAL_TAX_FREE_POT, INITIAL_DC_POT, SECONDARY_DC_POT, SECONDARY_DC_DRAWDOWN_AGE,
         DB_PENSIONS, START_AGE, END_AGE, MEAN_RETURN, STD_RETURN, strategy,
-        RANDOM_SEED
+        RANDOM_SEED,
+        output_file=output_dir / "pots_individual.png"
     )
     print()
     
     print("=" * 80)
-    print("All simulations complete. Charts saved.")
+    print(f"All simulations complete. Charts saved to: {output_dir.resolve()}")
     print("=" * 80)
 
 
