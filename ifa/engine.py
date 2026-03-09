@@ -7,10 +7,37 @@ from collections.abc import Callable, Sequence
 import numpy as np
 from numpy.typing import NDArray
 
-from ifa.models import DbPension
+from ifa.models import DbPension, DcPot
 
 DbPensionInput = DbPension | tuple[int, float]
+DcPotInput = DcPot | tuple[int, float]
 DrawdownFn = Callable[[int, float, dict[str, float]], float]
+
+
+def _normalize_dc_pots(
+    start_age: int,
+    dc_pot: float,
+    secondary_dc_pot: float,
+    secondary_dc_drawdown_age: int | None,
+    dc_pots: Sequence[DcPotInput] | None,
+) -> list[tuple[int, float]]:
+    """Normalize DC pot inputs into ``(drawdown_start_age, balance)`` tuples."""
+    if dc_pots is not None:
+        normalized: list[tuple[int, float]] = []
+        for pot in dc_pots:
+            if isinstance(pot, DcPot):
+                normalized.append((pot.drawdown_start_age, pot.initial_balance))
+            else:
+                normalized.append((int(pot[0]), float(pot[1])))
+        return normalized
+
+    secondary_start = (
+        start_age if secondary_dc_drawdown_age is None else secondary_dc_drawdown_age
+    )
+    return [
+        (start_age, float(dc_pot)),
+        (int(secondary_start), float(secondary_dc_pot)),
+    ]
 
 
 def calculate_db_pension_income(
@@ -48,6 +75,7 @@ def simulate_multi_pot_pension_path(
     returns: NDArray[np.float64],
     drawdown_fn: DrawdownFn | None = None,
     withdrawals_required: NDArray[np.float64] | None = None,
+    dc_pots: Sequence[DcPotInput] | None = None,
 ) -> tuple[
     NDArray[np.int_],
     NDArray[np.float64],
@@ -71,6 +99,7 @@ def simulate_multi_pot_pension_path(
         drawdown_fn: Strategy function returning desired annual withdrawal.
         withdrawals_required: Optional required withdrawals aligned with ages.
             When provided, these values are used directly (DB-adjusted spending).
+        dc_pots: Optional list of DC pots as ``(drawdown_start_age, balance)``.
 
     Returns:
         A tuple containing arrays for ages, balances, incomes, and withdrawals.
@@ -93,17 +122,35 @@ def simulate_multi_pot_pension_path(
             f"got {len(withdrawals_required)} for {num_years} ages"
         )
 
+    dc_pot_config = _normalize_dc_pots(
+        start_age=start_age,
+        dc_pot=dc_pot,
+        secondary_dc_pot=secondary_dc_pot,
+        secondary_dc_drawdown_age=secondary_dc_drawdown_age,
+        dc_pots=dc_pots,
+    )
+    num_dc_pots = len(dc_pot_config)
+
     total_balances = np.zeros(num_years, dtype=np.float64)
     dc_balances = np.zeros(num_years, dtype=np.float64)
     secondary_dc_balances = np.zeros(num_years, dtype=np.float64)
     tax_free_balances = np.zeros(num_years, dtype=np.float64)
     db_income_array = np.zeros(num_years, dtype=np.float64)
     total_withdrawals = np.zeros(num_years, dtype=np.float64)
+    dc_balance_matrix = np.zeros((num_dc_pots, num_years), dtype=np.float64)
 
-    dc_balances[0] = dc_pot
-    secondary_dc_balances[0] = secondary_dc_pot
+    drawdown_start_ages = np.array([pot[0] for pot in dc_pot_config], dtype=np.int_)
+    initial_balances = np.array([pot[1] for pot in dc_pot_config], dtype=np.float64)
+
+    if num_dc_pots > 0:
+        dc_balance_matrix[:, 0] = initial_balances
+
+    dc_balances[0] = dc_balance_matrix[0, 0] if num_dc_pots > 0 else 0.0
+    secondary_dc_balances[0] = (
+        float(np.sum(dc_balance_matrix[1:, 0])) if num_dc_pots > 1 else 0.0
+    )
     tax_free_balances[0] = tax_free_pot
-    total_balances[0] = dc_pot + secondary_dc_pot + tax_free_pot
+    total_balances[0] = float(np.sum(dc_balance_matrix[:, 0])) + tax_free_pot
 
     state_dict: dict[str, float] = {}
 
@@ -115,22 +162,23 @@ def simulate_multi_pot_pension_path(
         if prior_tax_free > 0:
             tax_free_balances[index] = prior_tax_free * (1.0 + annual_return)
 
-        prior_secondary = secondary_dc_balances[index - 1]
-        if (
-            secondary_dc_drawdown_age is not None
-            and current_age < secondary_dc_drawdown_age
-            and prior_secondary > 0
-        ):
-            secondary_dc_balances[index] = prior_secondary * (1.0 + annual_return)
-        else:
-            secondary_dc_balances[index] = prior_secondary
+        for pot_index in range(num_dc_pots):
+            prior_balance = dc_balance_matrix[pot_index, index - 1]
+            if prior_balance <= 0.0:
+                dc_balance_matrix[pot_index, index] = 0.0
+                continue
 
-        dc_balances[index] = dc_balances[index - 1] * (1.0 + annual_return)
+            if current_age < int(drawdown_start_ages[pot_index]):
+                dc_balance_matrix[pot_index, index] = (
+                    prior_balance * (1.0 + annual_return)
+                )
+            else:
+                dc_balance_matrix[pot_index, index] = prior_balance
 
         db_income = calculate_db_pension_income(current_age, db_pensions)
         db_income_array[index] = db_income
 
-        combined_dc = dc_balances[index] + secondary_dc_balances[index]
+        combined_dc = float(np.sum(dc_balance_matrix[:, index]))
         if withdrawals_required is not None:
             desired_withdrawal = float(withdrawals_required[index - 1])
         elif drawdown_fn is not None:
@@ -151,25 +199,30 @@ def simulate_multi_pot_pension_path(
         current_withdrawal += tax_free_withdrawal
 
         if current_withdrawal < desired_withdrawal:
-            main_dc_withdrawal = min(
-                desired_withdrawal - current_withdrawal, dc_balances[index]
-            )
-            dc_balances[index] -= main_dc_withdrawal
-            current_withdrawal += main_dc_withdrawal
+            for pot_index in range(num_dc_pots):
+                if current_age < int(drawdown_start_ages[pot_index]):
+                    continue
+                if current_withdrawal >= desired_withdrawal:
+                    break
 
-        if current_withdrawal < desired_withdrawal:
-            secondary_withdrawal = min(
-                desired_withdrawal - current_withdrawal, secondary_dc_balances[index]
-            )
-            secondary_dc_balances[index] -= secondary_withdrawal
-            current_withdrawal += secondary_withdrawal
+                withdrawal = min(
+                    desired_withdrawal - current_withdrawal,
+                    float(dc_balance_matrix[pot_index, index]),
+                )
+                dc_balance_matrix[pot_index, index] -= withdrawal
+                current_withdrawal += withdrawal
 
-        dc_balances[index] = max(0.0, dc_balances[index])
-        secondary_dc_balances[index] = max(0.0, secondary_dc_balances[index])
+        if num_dc_pots > 0:
+            dc_balance_matrix[:, index] = np.maximum(dc_balance_matrix[:, index], 0.0)
+
+        dc_balances[index] = dc_balance_matrix[0, index] if num_dc_pots > 0 else 0.0
+        secondary_dc_balances[index] = (
+            float(np.sum(dc_balance_matrix[1:, index])) if num_dc_pots > 1 else 0.0
+        )
         tax_free_balances[index] = max(0.0, tax_free_balances[index])
 
         total_balances[index] = (
-            dc_balances[index] + secondary_dc_balances[index] + tax_free_balances[index]
+            float(np.sum(dc_balance_matrix[:, index])) + tax_free_balances[index]
         )
         total_withdrawals[index] = current_withdrawal
 
@@ -198,6 +251,7 @@ def run_monte_carlo_simulation(
     num_simulations: int,
     seed: int,
     withdrawals_required: NDArray[np.float64] | None = None,
+    dc_pots: Sequence[DcPotInput] | None = None,
 ) -> tuple[NDArray[np.int_], NDArray[np.float64]]:
     """Run Monte Carlo simulation for one strategy.
 
@@ -215,6 +269,7 @@ def run_monte_carlo_simulation(
         num_simulations: Number of simulation paths.
         seed: RNG seed.
         withdrawals_required: Optional required withdrawals aligned with ages.
+        dc_pots: Optional list of DC pots as ``(drawdown_start_age, balance)``.
 
     Returns:
         Ages array and matrix of path balances with shape
@@ -241,6 +296,7 @@ def run_monte_carlo_simulation(
             returns,
             strategy_fn,
             withdrawals_required=withdrawals_required,
+            dc_pots=dc_pots,
         )
         paths[simulation_index, :] = total_balances
 

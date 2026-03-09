@@ -7,7 +7,13 @@ from typing import Final
 INITIAL_TAX_FREE_POT: Final[float] = 373_890
 INITIAL_DC_POT: Final[float] = 300_000
 SECONDARY_DC_POT: Final[float] = 65_000
+PRIMARY_DC_DRAWDOWN_AGE: Final[int] = 57
 SECONDARY_DC_DRAWDOWN_AGE: Final[int] = 65
+
+DC_POTS: Final[list[tuple[int, float]]] = [
+    (PRIMARY_DC_DRAWDOWN_AGE, INITIAL_DC_POT),
+    (SECONDARY_DC_DRAWDOWN_AGE, SECONDARY_DC_POT),
+]
 
 DB_PENSIONS: Final[list[tuple[int, float]]] = [
     (62, 12_510),

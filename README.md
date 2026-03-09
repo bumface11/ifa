@@ -65,6 +65,17 @@ Examples:
 The model compares a baseline plan (no events) against a life-events scenario on
 the same return path so the impact is easier to understand.
 
+## DC Pots
+
+The simulator now supports multiple DC pots, each with its own drawdown start age.
+
+- Primary DC pot drawdown start defaults to age `57`.
+- Additional DC pots can start later (for example age `65`).
+- Both CLI and Streamlit use the same per-pot drawdown rules.
+
+In Streamlit, open `DC Pot Inputs` in the sidebar to add or edit multiple DC
+pots and start ages.
+
 ## What The App Shows
 
 - Baseline vs scenario line chart on the same market path.
@@ -78,6 +89,8 @@ the same return path so the impact is easier to understand.
 - Compact metrics styling for easier viewing on smaller laptop screens.
 - Collapsible sidebar sections for DB pensions and life events to reduce
   scrolling in the control panel.
+- Collapsible `DC Pot Inputs` section supporting multiple DC pots with per-pot
+  drawdown start ages.
 - Theme-aware text styling so sidebar labels and expand/collapse controls stay
   readable in dark mode.
 - Streamlit theme-variable-based styling so both text contrast and background

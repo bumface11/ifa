@@ -12,6 +12,7 @@ from matplotlib.figure import Figure
 
 from ifa.engine import (
     DbPensionInput,
+    DcPotInput,
     run_monte_carlo_simulation,
     simulate_multi_pot_pension_path,
 )
@@ -114,13 +115,29 @@ def _collect_standard_event_entries(
     db_pensions: Sequence[DbPensionInput],
     start_age: int,
     end_age: int,
+    dc_pots: Sequence[DcPotInput] | None = None,
 ) -> list[tuple[int, str, str]]:
     """Collect standard pension events as (age, note, color)."""
     colors_event = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A"]
     event_index = 0
     entries: list[tuple[int, str, str]] = []
 
-    if (
+    if dc_pots is not None:
+        for pot_index, pot in enumerate(dc_pots, start=1):
+            if isinstance(pot, tuple):
+                drawdown_age = int(pot[0])
+            else:
+                drawdown_age = int(pot.drawdown_start_age)
+            if start_age <= drawdown_age <= end_age:
+                entries.append(
+                    (
+                        drawdown_age,
+                        f"DC pot {pot_index} drawdown starts at age {drawdown_age}.",
+                        colors_event[event_index % len(colors_event)],
+                    )
+                )
+                event_index += 1
+    elif (
         secondary_dc_drawdown_age is not None
         and start_age <= secondary_dc_drawdown_age <= end_age
     ):
@@ -192,6 +209,7 @@ def _build_all_event_entries(
     life_events: Sequence[LifeEvent],
     start_age: int,
     end_age: int,
+    dc_pots: Sequence[DcPotInput] | None = None,
 ) -> list[tuple[int, str, str]]:
     """Build the complete event list for annotation and notes."""
     entries = _collect_standard_event_entries(
@@ -199,6 +217,7 @@ def _build_all_event_entries(
         db_pensions=db_pensions,
         start_age=start_age,
         end_age=end_age,
+        dc_pots=dc_pots,
     )
     entries.extend(
         _collect_life_event_entries(
@@ -224,6 +243,7 @@ def plot_pots_stacked_area(
     seed: int,
     withdrawals_required: np.ndarray | None = None,
     life_events: Sequence[LifeEvent] = (),
+    dc_pots: Sequence[DcPotInput] | None = None,
     save_output: bool = True,
     return_figure: bool = False,
     output_file: str | Path = "pots_stacked_area.png",
@@ -251,6 +271,7 @@ def plot_pots_stacked_area(
         returns,
         strategy_fn if withdrawals_required is None else None,
         withdrawals_required=withdrawals_required,
+        dc_pots=dc_pots,
     )
 
     fig, ax = plt.subplots(figsize=(14, 8))
@@ -291,6 +312,7 @@ def plot_pots_stacked_area(
         life_events=life_events,
         start_age=start_age,
         end_age=end_age,
+        dc_pots=dc_pots,
     )
     notes = _draw_sorted_event_annotations(ax, event_entries, show_note_markers=True)
 
@@ -336,6 +358,7 @@ def plot_individual_pots_subplots(
     seed: int,
     withdrawals_required: np.ndarray | None = None,
     life_events: Sequence[LifeEvent] = (),
+    dc_pots: Sequence[DcPotInput] | None = None,
     save_output: bool = True,
     return_figure: bool = False,
     output_file: str | Path = "pots_individual.png",
@@ -363,6 +386,7 @@ def plot_individual_pots_subplots(
         returns,
         strategy_fn if withdrawals_required is None else None,
         withdrawals_required=withdrawals_required,
+        dc_pots=dc_pots,
     )
 
     fig, axes = plt.subplots(2, 2, figsize=(15, 10))
@@ -475,6 +499,7 @@ def plot_individual_pots_subplots(
         life_events=life_events,
         start_age=start_age,
         end_age=end_age,
+        dc_pots=dc_pots,
     )
 
     all_axes = [axes[0, 0], axes[0, 1], axes[1, 0], axes[1, 1]]
@@ -513,6 +538,7 @@ def plot_sequence_of_returns_scenarios(
     strategy_fn: DrawdownFn,
     withdrawals_required: np.ndarray | None = None,
     life_events: Sequence[LifeEvent] = (),
+    dc_pots: Sequence[DcPotInput] | None = None,
     save_output: bool = True,
     return_figure: bool = False,
     output_file: str | Path = "sequence_scenarios.png",
@@ -534,6 +560,7 @@ def plot_sequence_of_returns_scenarios(
         early_bad,
         strategy_fn if withdrawals_required is None else None,
         withdrawals_required=withdrawals_required,
+        dc_pots=dc_pots,
     )
     _, balances_early_good, *_ = simulate_multi_pot_pension_path(
         tax_free_pot,
@@ -546,6 +573,7 @@ def plot_sequence_of_returns_scenarios(
         early_good,
         strategy_fn if withdrawals_required is None else None,
         withdrawals_required=withdrawals_required,
+        dc_pots=dc_pots,
     )
     _, balances_constant, *_ = simulate_multi_pot_pension_path(
         tax_free_pot,
@@ -558,6 +586,7 @@ def plot_sequence_of_returns_scenarios(
         constant,
         strategy_fn if withdrawals_required is None else None,
         withdrawals_required=withdrawals_required,
+        dc_pots=dc_pots,
     )
     _, balances_no_withdrawal, *_ = simulate_multi_pot_pension_path(
         tax_free_pot,
@@ -569,6 +598,7 @@ def plot_sequence_of_returns_scenarios(
         end_age,
         constant,
         create_no_withdrawal_strategy(),
+        dc_pots=dc_pots,
     )
 
     fig, ax = plt.subplots(figsize=(12, 7))
@@ -617,6 +647,7 @@ def plot_sequence_of_returns_scenarios(
         life_events=life_events,
         start_age=start_age,
         end_age=end_age,
+        dc_pots=dc_pots,
     )
     notes = _draw_sorted_event_annotations(ax, event_entries, show_note_markers=True)
 
@@ -661,6 +692,7 @@ def plot_monte_carlo_fan_chart(
     seed: int,
     withdrawals_required: np.ndarray | None = None,
     life_events: Sequence[LifeEvent] = (),
+    dc_pots: Sequence[DcPotInput] | None = None,
     save_output: bool = True,
     return_figure: bool = False,
     output_file: str | Path = "monte_carlo_fan.png",
@@ -680,6 +712,7 @@ def plot_monte_carlo_fan_chart(
         num_simulations,
         seed,
         withdrawals_required=withdrawals_required,
+        dc_pots=dc_pots,
     )
 
     p10 = np.percentile(paths, 10, axis=0)
@@ -720,6 +753,7 @@ def plot_monte_carlo_fan_chart(
         life_events=life_events,
         start_age=start_age,
         end_age=end_age,
+        dc_pots=dc_pots,
     )
     notes = _draw_sorted_event_annotations(ax, event_entries, show_note_markers=True)
 
@@ -766,6 +800,7 @@ def plot_multiple_drawdown_levels(
     std_return: float,
     annual_drawdowns: Sequence[float],
     seed: int,
+    dc_pots: Sequence[DcPotInput] | None = None,
     output_file: str | Path = "multiple_drawdowns.png",
 ) -> None:
     """Plot outcomes for multiple fixed drawdown levels on one return path."""
@@ -789,6 +824,7 @@ def plot_multiple_drawdown_levels(
             end_age,
             returns,
             strategy,
+            dc_pots=dc_pots,
         )
         ax.plot(
             ages,
@@ -810,6 +846,7 @@ def plot_multiple_drawdown_levels(
         end_age,
         returns,
         create_no_withdrawal_strategy(),
+        dc_pots=dc_pots,
     )
     ax.plot(
         ages,
@@ -830,6 +867,7 @@ def plot_multiple_drawdown_levels(
         life_events=(),
         start_age=start_age,
         end_age=end_age,
+        dc_pots=dc_pots,
     )
     notes = _draw_sorted_event_annotations(ax, event_entries, show_note_markers=True)
 

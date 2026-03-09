@@ -25,6 +25,14 @@ class DbPension:
 
 
 @dataclass(frozen=True)
+class DcPot:
+    """Represents a DC pot with a drawdown start age."""
+
+    drawdown_start_age: int
+    initial_balance: float
+
+
+@dataclass(frozen=True)
 class LumpSumEvent:
     """One-off real-terms spending increase at a specific age."""
 
@@ -55,6 +63,7 @@ class Scenario:
     secondary_dc_pot: float
     secondary_dc_drawdown_age: int | None
     db_pensions: tuple[DbPension, ...]
+    dc_pots: tuple[DcPot, ...] = ()
     baseline_spending: float | None = None
     events: tuple[LifeEvent, ...] = ()
     withdrawals_required: NDArray[np.float64] | None = None

@@ -15,14 +15,12 @@ import numpy as np
 from ifa.config import (
     ANNUAL_DRAWDOWNS,
     DB_PENSIONS,
+    DC_POTS,
     END_AGE,
-    INITIAL_DC_POT,
     INITIAL_TAX_FREE_POT,
     MEAN_RETURN,
     NUM_SIMULATIONS,
     RANDOM_SEED,
-    SECONDARY_DC_DRAWDOWN_AGE,
-    SECONDARY_DC_POT,
     START_AGE,
     STD_RETURN,
 )
@@ -117,14 +115,15 @@ def run_life_events_comparison(
         _,
     ) = simulate_multi_pot_pension_path(
         tax_free_pot=INITIAL_TAX_FREE_POT,
-        dc_pot=INITIAL_DC_POT,
-        secondary_dc_pot=SECONDARY_DC_POT,
-        secondary_dc_drawdown_age=SECONDARY_DC_DRAWDOWN_AGE,
+        dc_pot=float(DC_POTS[0][1]),
+        secondary_dc_pot=float(sum(pot[1] for pot in DC_POTS[1:])),
+        secondary_dc_drawdown_age=int(DC_POTS[1][0]) if len(DC_POTS) > 1 else END_AGE,
         db_pensions=DB_PENSIONS,
         start_age=START_AGE,
         end_age=END_AGE,
         returns=returns,
         withdrawals_required=baseline_required,
+        dc_pots=DC_POTS,
     )
     (
         _,
@@ -136,14 +135,15 @@ def run_life_events_comparison(
         _,
     ) = simulate_multi_pot_pension_path(
         tax_free_pot=INITIAL_TAX_FREE_POT,
-        dc_pot=INITIAL_DC_POT,
-        secondary_dc_pot=SECONDARY_DC_POT,
-        secondary_dc_drawdown_age=SECONDARY_DC_DRAWDOWN_AGE,
+        dc_pot=float(DC_POTS[0][1]),
+        secondary_dc_pot=float(sum(pot[1] for pot in DC_POTS[1:])),
+        secondary_dc_drawdown_age=int(DC_POTS[1][0]) if len(DC_POTS) > 1 else END_AGE,
         db_pensions=DB_PENSIONS,
         start_age=START_AGE,
         end_age=END_AGE,
         returns=returns,
         withdrawals_required=scenario_required,
+        dc_pots=DC_POTS,
     )
 
     plot_baseline_vs_scenario_balances(
@@ -204,12 +204,14 @@ def main() -> None:
     LOGGER.info("%s", "=" * 80)
     LOGGER.info("\nConfiguration:")
     LOGGER.info("  Tax-Free Pot: %s", _format_gbp(INITIAL_TAX_FREE_POT))
-    LOGGER.info("  Main DC Pot: %s", _format_gbp(INITIAL_DC_POT))
-    LOGGER.info(
-        "  Secondary DC Pot: %s (starts drawing at age %s)",
-        _format_gbp(SECONDARY_DC_POT),
-        SECONDARY_DC_DRAWDOWN_AGE,
-    )
+    LOGGER.info("  DC Pots: %d", len(DC_POTS))
+    for pot_index, (drawdown_start, balance) in enumerate(DC_POTS, start=1):
+        LOGGER.info(
+            "    - DC Pot %d: %s (drawdown starts age %d)",
+            pot_index,
+            _format_gbp(balance),
+            drawdown_start,
+        )
     LOGGER.info("  DB Pension Streams: %d streams", len(DB_PENSIONS))
     for start_age, amount in DB_PENSIONS:
         LOGGER.info("    - %s/year from age %d", _format_gbp(amount), start_age)
@@ -230,9 +232,9 @@ def main() -> None:
     )
     plot_sequence_of_returns_scenarios(
         INITIAL_TAX_FREE_POT,
-        INITIAL_DC_POT,
-        SECONDARY_DC_POT,
-        SECONDARY_DC_DRAWDOWN_AGE,
+        float(DC_POTS[0][1]),
+        float(sum(pot[1] for pot in DC_POTS[1:])),
+        int(DC_POTS[1][0]) if len(DC_POTS) > 1 else END_AGE,
         DB_PENSIONS,
         START_AGE,
         END_AGE,
@@ -241,6 +243,7 @@ def main() -> None:
         strategy,
         withdrawals_required=scenario_required,
         life_events=SCENARIO_EVENTS,
+        dc_pots=DC_POTS,
         output_file=output_dir / "sequence_scenarios.png",
     )
     LOGGER.info("")
@@ -248,9 +251,9 @@ def main() -> None:
     LOGGER.info("2. Running Monte Carlo simulation...")
     plot_monte_carlo_fan_chart(
         INITIAL_TAX_FREE_POT,
-        INITIAL_DC_POT,
-        SECONDARY_DC_POT,
-        SECONDARY_DC_DRAWDOWN_AGE,
+        float(DC_POTS[0][1]),
+        float(sum(pot[1] for pot in DC_POTS[1:])),
+        int(DC_POTS[1][0]) if len(DC_POTS) > 1 else END_AGE,
         DB_PENSIONS,
         START_AGE,
         END_AGE,
@@ -261,14 +264,15 @@ def main() -> None:
         RANDOM_SEED,
         withdrawals_required=scenario_required,
         life_events=SCENARIO_EVENTS,
+        dc_pots=DC_POTS,
         output_file=output_dir / "monte_carlo_fan.png",
     )
     LOGGER.info("")
     _, monte_carlo_paths = run_monte_carlo_simulation(
         tax_free_pot=INITIAL_TAX_FREE_POT,
-        dc_pot=INITIAL_DC_POT,
-        secondary_dc_pot=SECONDARY_DC_POT,
-        secondary_dc_drawdown_age=SECONDARY_DC_DRAWDOWN_AGE,
+        dc_pot=float(DC_POTS[0][1]),
+        secondary_dc_pot=float(sum(pot[1] for pot in DC_POTS[1:])),
+        secondary_dc_drawdown_age=int(DC_POTS[1][0]) if len(DC_POTS) > 1 else END_AGE,
         db_pensions=DB_PENSIONS,
         start_age=START_AGE,
         end_age=END_AGE,
@@ -278,6 +282,7 @@ def main() -> None:
         num_simulations=NUM_SIMULATIONS,
         seed=RANDOM_SEED,
         withdrawals_required=scenario_required,
+        dc_pots=DC_POTS,
     )
     mc_metrics = summarize_monte_carlo(monte_carlo_paths)
     LOGGER.info(
@@ -293,9 +298,9 @@ def main() -> None:
     LOGGER.info("3. Comparing multiple DC drawdown levels...")
     plot_multiple_drawdown_levels(
         INITIAL_TAX_FREE_POT,
-        INITIAL_DC_POT,
-        SECONDARY_DC_POT,
-        SECONDARY_DC_DRAWDOWN_AGE,
+        float(DC_POTS[0][1]),
+        float(sum(pot[1] for pot in DC_POTS[1:])),
+        int(DC_POTS[1][0]) if len(DC_POTS) > 1 else END_AGE,
         DB_PENSIONS,
         START_AGE,
         END_AGE,
@@ -303,6 +308,7 @@ def main() -> None:
         STD_RETURN,
         ANNUAL_DRAWDOWNS,
         RANDOM_SEED,
+        dc_pots=DC_POTS,
         output_file=output_dir / "multiple_drawdowns.png",
     )
     LOGGER.info("")
@@ -310,9 +316,9 @@ def main() -> None:
     LOGGER.info("4. Plotting pot composition over time (stacked areas)...")
     plot_pots_stacked_area(
         INITIAL_TAX_FREE_POT,
-        INITIAL_DC_POT,
-        SECONDARY_DC_POT,
-        SECONDARY_DC_DRAWDOWN_AGE,
+        float(DC_POTS[0][1]),
+        float(sum(pot[1] for pot in DC_POTS[1:])),
+        int(DC_POTS[1][0]) if len(DC_POTS) > 1 else END_AGE,
         DB_PENSIONS,
         START_AGE,
         END_AGE,
@@ -322,6 +328,7 @@ def main() -> None:
         RANDOM_SEED,
         withdrawals_required=scenario_required,
         life_events=SCENARIO_EVENTS,
+        dc_pots=DC_POTS,
         output_file=output_dir / "pots_stacked_area.png",
     )
     LOGGER.info("")
@@ -329,9 +336,9 @@ def main() -> None:
     LOGGER.info("5. Plotting individual pots dynamics (4-panel subplots)...")
     plot_individual_pots_subplots(
         INITIAL_TAX_FREE_POT,
-        INITIAL_DC_POT,
-        SECONDARY_DC_POT,
-        SECONDARY_DC_DRAWDOWN_AGE,
+        float(DC_POTS[0][1]),
+        float(sum(pot[1] for pot in DC_POTS[1:])),
+        int(DC_POTS[1][0]) if len(DC_POTS) > 1 else END_AGE,
         DB_PENSIONS,
         START_AGE,
         END_AGE,
@@ -341,6 +348,7 @@ def main() -> None:
         RANDOM_SEED,
         withdrawals_required=scenario_required,
         life_events=SCENARIO_EVENTS,
+        dc_pots=DC_POTS,
         output_file=output_dir / "pots_individual.png",
     )
     LOGGER.info("")

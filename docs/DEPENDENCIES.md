@@ -60,3 +60,5 @@ graph LR
 - Core simulation logic does not require Streamlit.
 - Streamlit is only needed for `ifa_web.py`.
 - CLI and Streamlit both reuse the same engine, events, and plotting modules.
+- Both frontends now pass multi-DC-pot inputs into `ifa.engine` using per-pot
+    drawdown start ages.

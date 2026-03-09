@@ -10,14 +10,13 @@ import streamlit as st
 
 from ifa.config import (
     DB_PENSIONS,
+    DC_POTS,
     END_AGE,
     INITIAL_DC_POT,
     INITIAL_TAX_FREE_POT,
     MEAN_RETURN,
     NUM_SIMULATIONS,
     RANDOM_SEED,
-    SECONDARY_DC_DRAWDOWN_AGE,
-    SECONDARY_DC_POT,
     START_AGE,
     STD_RETURN,
 )
@@ -48,6 +47,56 @@ def _build_db_income(
         [calculate_db_pension_income(int(age), db_pensions) for age in ages],
         dtype=np.float64,
     )
+
+
+def _build_dc_pots(start_age: int, end_age: int) -> list[tuple[int, float]]:
+    """Collect DC pot balances and drawdown start ages from active container."""
+    st.markdown("DC Pots")
+    default_count = len(DC_POTS)
+    pot_count = int(
+        st.number_input(
+            "Number of DC pots",
+            min_value=1,
+            max_value=6,
+            value=max(1, default_count),
+            help="Each DC pot can have its own drawdown start age.",
+        )
+    )
+
+    pots: list[tuple[int, float]] = []
+    for index in range(pot_count):
+        if index < default_count:
+            default_start_age = int(DC_POTS[index][0])
+            default_balance = float(DC_POTS[index][1])
+        elif index == 0:
+            default_start_age = 57
+            default_balance = float(INITIAL_DC_POT)
+        else:
+            default_start_age = max(start_age, 57)
+            default_balance = 0.0
+
+        drawdown_start_age = int(
+            st.number_input(
+                f"DC pot #{index + 1} drawdown start age",
+                min_value=start_age,
+                max_value=end_age,
+                value=min(max(default_start_age, start_age), end_age),
+                key=f"dc_start_age_{index}",
+                help="This pot can only be used for withdrawals from this age onward.",
+            )
+        )
+        initial_balance = float(
+            st.number_input(
+                f"DC pot #{index + 1} initial balance GBP",
+                min_value=0.0,
+                value=default_balance,
+                step=1_000.0,
+                key=f"dc_initial_balance_{index}",
+            )
+        )
+        pots.append((drawdown_start_age, initial_balance))
+
+    return pots
 
 
 def _build_life_events(
@@ -290,33 +339,6 @@ def main() -> None:
             step=1_000.0,
         )
     )
-    main_dc_pot = float(
-        st.sidebar.number_input(
-            "Main DC pot GBP",
-            min_value=0.0,
-            value=float(INITIAL_DC_POT),
-            step=1_000.0,
-        )
-    )
-    secondary_dc_pot = float(
-        st.sidebar.number_input(
-            "Secondary DC pot GBP",
-            min_value=0.0,
-            value=float(SECONDARY_DC_POT),
-            step=1_000.0,
-        )
-    )
-    use_secondary = st.sidebar.checkbox("Use secondary DC drawdown age", value=True)
-    secondary_draw_age = None
-    if use_secondary:
-        secondary_draw_age = int(
-            st.sidebar.number_input(
-                "Secondary DC drawdown age",
-                min_value=start_age,
-                max_value=end_age,
-                value=min(max(SECONDARY_DC_DRAWDOWN_AGE, start_age), end_age),
-            )
-        )
 
     baseline_spending = float(
         st.sidebar.number_input(
@@ -387,6 +409,9 @@ def main() -> None:
 
     save_outputs = st.sidebar.checkbox("Save PNG outputs to output/", value=False)
 
+    with st.sidebar.expander("DC Pot Inputs", expanded=False):
+        dc_pots = _build_dc_pots(start_age, end_age)
+
     with st.sidebar.expander("DB Pension Inputs", expanded=False):
         db_pensions = _build_db_pensions(start_age, end_age)
 
@@ -401,6 +426,12 @@ def main() -> None:
     output_dir = Path("output")
     if save_outputs:
         output_dir.mkdir(parents=True, exist_ok=True)
+
+    primary_dc_pot = float(dc_pots[0][1]) if len(dc_pots) > 0 else 0.0
+    secondary_dc_pot = (
+        float(sum(pot[1] for pot in dc_pots[1:])) if len(dc_pots) > 1 else 0.0
+    )
+    secondary_draw_age = int(dc_pots[1][0]) if len(dc_pots) > 1 else end_age
 
     ages = np.arange(start_age, end_age + 1, dtype=np.int_)
     db_income = _build_db_income(ages, db_pensions)
@@ -427,7 +458,7 @@ def main() -> None:
     base_strategy = create_fixed_real_drawdown_strategy(baseline_spending)
     _, baseline_balances, *_ = simulate_multi_pot_pension_path(
         tax_free_pot=tax_free_pot,
-        dc_pot=main_dc_pot,
+        dc_pot=primary_dc_pot,
         secondary_dc_pot=secondary_dc_pot,
         secondary_dc_drawdown_age=secondary_draw_age,
         db_pensions=db_pensions,
@@ -436,10 +467,11 @@ def main() -> None:
         returns=returns,
         drawdown_fn=base_strategy,
         withdrawals_required=baseline_required,
+        dc_pots=dc_pots,
     )
     _, scenario_balances, *_ = simulate_multi_pot_pension_path(
         tax_free_pot=tax_free_pot,
-        dc_pot=main_dc_pot,
+        dc_pot=primary_dc_pot,
         secondary_dc_pot=secondary_dc_pot,
         secondary_dc_drawdown_age=secondary_draw_age,
         db_pensions=db_pensions,
@@ -448,11 +480,12 @@ def main() -> None:
         returns=returns,
         drawdown_fn=base_strategy,
         withdrawals_required=scenario_required,
+        dc_pots=dc_pots,
     )
 
     _, monte_carlo_paths = run_monte_carlo_simulation(
         tax_free_pot=tax_free_pot,
-        dc_pot=main_dc_pot,
+        dc_pot=primary_dc_pot,
         secondary_dc_pot=secondary_dc_pot,
         secondary_dc_drawdown_age=secondary_draw_age,
         db_pensions=db_pensions,
@@ -464,6 +497,7 @@ def main() -> None:
         num_simulations=num_simulations,
         seed=random_seed,
         withdrawals_required=scenario_required,
+        dc_pots=dc_pots,
     )
 
     baseline_metrics = summarize_path(baseline_balances)
@@ -500,7 +534,7 @@ def main() -> None:
 
     sequence_fig = plot_sequence_of_returns_scenarios(
         tax_free_pot=tax_free_pot,
-        dc_pot=main_dc_pot,
+        dc_pot=primary_dc_pot,
         secondary_dc_pot=secondary_dc_pot,
         secondary_dc_drawdown_age=secondary_draw_age,
         db_pensions=db_pensions,
@@ -511,6 +545,7 @@ def main() -> None:
         strategy_fn=base_strategy,
         withdrawals_required=scenario_required,
         life_events=life_events,
+        dc_pots=dc_pots,
         save_output=save_outputs,
         return_figure=True,
         output_file=output_dir / "sequence_scenarios_streamlit.png",
@@ -521,7 +556,7 @@ def main() -> None:
 
     fan_fig = plot_monte_carlo_fan_chart(
         tax_free_pot=tax_free_pot,
-        dc_pot=main_dc_pot,
+        dc_pot=primary_dc_pot,
         secondary_dc_pot=secondary_dc_pot,
         secondary_dc_drawdown_age=secondary_draw_age,
         db_pensions=db_pensions,
@@ -534,6 +569,7 @@ def main() -> None:
         seed=random_seed,
         withdrawals_required=scenario_required,
         life_events=life_events,
+        dc_pots=dc_pots,
         save_output=save_outputs,
         return_figure=True,
         output_file=output_dir / "monte_carlo_fan_streamlit.png",
@@ -552,7 +588,7 @@ def main() -> None:
 
     stacked_fig = plot_pots_stacked_area(
         tax_free_pot=tax_free_pot,
-        dc_pot=main_dc_pot,
+        dc_pot=primary_dc_pot,
         secondary_dc_pot=secondary_dc_pot,
         secondary_dc_drawdown_age=secondary_draw_age,
         db_pensions=db_pensions,
@@ -564,6 +600,7 @@ def main() -> None:
         seed=random_seed,
         withdrawals_required=scenario_required,
         life_events=life_events,
+        dc_pots=dc_pots,
         save_output=save_outputs,
         return_figure=True,
         output_file=output_dir / "pots_stacked_streamlit.png",
@@ -574,7 +611,7 @@ def main() -> None:
 
     individual_fig = plot_individual_pots_subplots(
         tax_free_pot=tax_free_pot,
-        dc_pot=main_dc_pot,
+        dc_pot=primary_dc_pot,
         secondary_dc_pot=secondary_dc_pot,
         secondary_dc_drawdown_age=secondary_draw_age,
         db_pensions=db_pensions,
@@ -586,6 +623,7 @@ def main() -> None:
         seed=random_seed,
         withdrawals_required=scenario_required,
         life_events=life_events,
+        dc_pots=dc_pots,
         save_output=save_outputs,
         return_figure=True,
         output_file=output_dir / "pots_individual_streamlit.png",
