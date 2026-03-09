@@ -94,3 +94,59 @@ def build_required_withdrawals(
         spending[year_idx] += event.amount
 
     return np.maximum(0.0, spending - db_income)
+
+
+def build_annual_spending_schedule(
+    ages: NDArray[np.int_],
+    baseline_spending: float,
+    events: Sequence[LifeEvent],
+) -> NDArray[np.float64]:
+    """Build annual spending target from baseline and step events.
+
+    This schedule intentionally excludes lump sums and DB income offsets. It is
+    designed for chart annotations where users want to see yearly spending level
+    changes over time.
+
+    Args:
+        ages: Inclusive age sequence for the simulation horizon.
+        baseline_spending: Baseline annual spending in real terms.
+        events: Life events that may change yearly spending.
+
+    Returns:
+        Annual spending target by age.
+
+    Raises:
+        ValueError: If ages are empty or a step event is out of range.
+    """
+    if ages.size == 0:
+        raise ValueError("ages cannot be empty")
+
+    min_age = int(ages[0])
+    max_age = int(ages[-1])
+    spending = np.full(ages.shape[0], baseline_spending, dtype=np.float64)
+
+    for event in events:
+        if not isinstance(event, SpendingStepEvent):
+            continue
+
+        if event.start_age < min_age or event.start_age > max_age:
+            raise ValueError(
+                "SpendingStepEvent start_age out of scenario range: "
+                f"{event.start_age} not in [{min_age}, {max_age}]"
+            )
+        effective_end = max_age if event.end_age is None else event.end_age
+        if effective_end < event.start_age:
+            raise ValueError(
+                "SpendingStepEvent end_age must be >= start_age; "
+                f"got end_age={effective_end}, start_age={event.start_age}"
+            )
+        if effective_end < min_age or effective_end > max_age:
+            raise ValueError(
+                "SpendingStepEvent end_age out of scenario range: "
+                f"{effective_end} not in [{min_age}, {max_age}]"
+            )
+
+        mask = (ages >= event.start_age) & (ages <= effective_end)
+        spending[mask] += event.extra_per_year
+
+    return spending

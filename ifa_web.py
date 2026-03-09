@@ -25,7 +25,7 @@ from ifa.engine import (
     run_monte_carlo_simulation,
     simulate_multi_pot_pension_path,
 )
-from ifa.events import build_required_withdrawals
+from ifa.events import build_annual_spending_schedule, build_required_withdrawals
 from ifa.explain import build_plain_english_explanation
 from ifa.metrics import summarize_monte_carlo, summarize_path
 from ifa.models import LifeEvent, LumpSumEvent, SpendingStepEvent
@@ -447,6 +447,11 @@ def main() -> None:
         db_income=db_income,
         events=life_events,
     )
+    annual_spending_schedule = build_annual_spending_schedule(
+        ages=ages,
+        baseline_spending=baseline_spending,
+        events=life_events,
+    )
 
     years = end_age - start_age
     returns = (
@@ -524,6 +529,7 @@ def main() -> None:
         ages=ages,
         baseline_balances=baseline_balances,
         scenario_balances=scenario_balances,
+        annual_spending_schedule=annual_spending_schedule,
         save_output=save_outputs,
         return_figure=True,
         output_file=output_dir / "baseline_vs_scenario_streamlit.png",
@@ -545,6 +551,7 @@ def main() -> None:
         strategy_fn=base_strategy,
         withdrawals_required=scenario_required,
         life_events=life_events,
+        annual_spending_schedule=annual_spending_schedule,
         dc_pots=dc_pots,
         save_output=save_outputs,
         return_figure=True,
@@ -569,6 +576,7 @@ def main() -> None:
         seed=random_seed,
         withdrawals_required=scenario_required,
         life_events=life_events,
+        annual_spending_schedule=annual_spending_schedule,
         dc_pots=dc_pots,
         save_output=save_outputs,
         return_figure=True,
@@ -600,6 +608,7 @@ def main() -> None:
         seed=random_seed,
         withdrawals_required=scenario_required,
         life_events=life_events,
+        annual_spending_schedule=annual_spending_schedule,
         dc_pots=dc_pots,
         save_output=save_outputs,
         return_figure=True,

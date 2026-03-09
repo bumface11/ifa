@@ -110,6 +110,41 @@ def _draw_sorted_event_annotations(
     return notes
 
 
+def _add_spending_axis(
+    ax: plt.Axes,
+    ages: np.ndarray,
+    annual_spending_schedule: np.ndarray,
+) -> plt.Axes:
+    """Add a secondary axis showing annual spending schedule."""
+    if annual_spending_schedule.shape[0] != ages.shape[0]:
+        raise ValueError(
+            "annual_spending_schedule length must match ages length; "
+            f"got {annual_spending_schedule.shape[0]} and {ages.shape[0]}"
+        )
+
+    axis_secondary = ax.twinx()
+    axis_secondary.step(
+        ages,
+        annual_spending_schedule,
+        where="post",
+        linewidth=2,
+        color="#B45309",
+        linestyle="-.",
+        label="Annual spending",
+    )
+    axis_secondary.set_ylabel(
+        "Annual Spending (GBP)",
+        fontsize=11,
+        fontweight="bold",
+        color="#B45309",
+    )
+    axis_secondary.tick_params(axis="y", labelcolor="#B45309", labelsize=11)
+    axis_secondary.yaxis.set_major_formatter(
+        plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
+    )
+    return axis_secondary
+
+
 def _collect_standard_event_entries(
     secondary_dc_drawdown_age: int | None,
     db_pensions: Sequence[DbPensionInput],
@@ -243,6 +278,7 @@ def plot_pots_stacked_area(
     seed: int,
     withdrawals_required: np.ndarray | None = None,
     life_events: Sequence[LifeEvent] = (),
+    annual_spending_schedule: np.ndarray | None = None,
     dc_pots: Sequence[DcPotInput] | None = None,
     save_output: bool = True,
     return_figure: bool = False,
@@ -332,6 +368,12 @@ def plot_pots_stacked_area(
         plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
     )
     _apply_numeric_text_scale(ax)
+
+    if annual_spending_schedule is not None:
+        axis_secondary = _add_spending_axis(ax, ages, annual_spending_schedule)
+        lines1, labels1 = ax.get_legend_handles_labels()
+        lines2, labels2 = axis_secondary.get_legend_handles_labels()
+        ax.legend(lines1 + lines2, labels1 + labels2, fontsize=10, loc="upper right")
 
     target = _to_output_path(output_file)
     _add_notes_box(fig, notes)
@@ -506,9 +548,7 @@ def plot_individual_pots_subplots(
     notes_axis = axes[1, 1]
 
     for axis in all_axes:
-        if axis is notes_axis:
-            continue
-        _draw_sorted_event_annotations(axis, event_entries, show_note_markers=False)
+        _draw_sorted_event_annotations(axis, event_entries, show_note_markers=True)
 
     notes = _draw_sorted_event_annotations(
         notes_axis, event_entries, show_note_markers=True
@@ -538,6 +578,7 @@ def plot_sequence_of_returns_scenarios(
     strategy_fn: DrawdownFn,
     withdrawals_required: np.ndarray | None = None,
     life_events: Sequence[LifeEvent] = (),
+    annual_spending_schedule: np.ndarray | None = None,
     dc_pots: Sequence[DcPotInput] | None = None,
     save_output: bool = True,
     return_figure: bool = False,
@@ -666,6 +707,12 @@ def plot_sequence_of_returns_scenarios(
     )
     _apply_numeric_text_scale(ax)
 
+    if annual_spending_schedule is not None:
+        axis_secondary = _add_spending_axis(ax, ages, annual_spending_schedule)
+        lines1, labels1 = ax.get_legend_handles_labels()
+        lines2, labels2 = axis_secondary.get_legend_handles_labels()
+        ax.legend(lines1 + lines2, labels1 + labels2, fontsize=10, loc="best")
+
     _add_notes_box(fig, notes)
     if save_output:
         target = _to_output_path(output_file)
@@ -692,6 +739,7 @@ def plot_monte_carlo_fan_chart(
     seed: int,
     withdrawals_required: np.ndarray | None = None,
     life_events: Sequence[LifeEvent] = (),
+    annual_spending_schedule: np.ndarray | None = None,
     dc_pots: Sequence[DcPotInput] | None = None,
     save_output: bool = True,
     return_figure: bool = False,
@@ -775,6 +823,12 @@ def plot_monte_carlo_fan_chart(
         plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
     )
     _apply_numeric_text_scale(ax)
+
+    if annual_spending_schedule is not None:
+        axis_secondary = _add_spending_axis(ax, ages, annual_spending_schedule)
+        lines1, labels1 = ax.get_legend_handles_labels()
+        lines2, labels2 = axis_secondary.get_legend_handles_labels()
+        ax.legend(lines1 + lines2, labels1 + labels2, fontsize=10, loc="best")
 
     target = _to_output_path(output_file)
     _add_notes_box(fig, notes)
@@ -896,6 +950,7 @@ def plot_baseline_vs_scenario_balances(
     ages: np.ndarray,
     baseline_balances: np.ndarray,
     scenario_balances: np.ndarray,
+    annual_spending_schedule: np.ndarray | None = None,
     save_output: bool = True,
     return_figure: bool = False,
     output_file: str | Path = "baseline_vs_scenario.png",
@@ -935,6 +990,12 @@ def plot_baseline_vs_scenario_balances(
         plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
     )
     _apply_numeric_text_scale(ax)
+
+    if annual_spending_schedule is not None:
+        axis_secondary = _add_spending_axis(ax, ages, annual_spending_schedule)
+        lines1, labels1 = ax.get_legend_handles_labels()
+        lines2, labels2 = axis_secondary.get_legend_handles_labels()
+        ax.legend(lines1 + lines2, labels1 + labels2, fontsize=10, loc="best")
 
     target = _to_output_path(output_file)
     fig.tight_layout()

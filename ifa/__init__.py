@@ -5,7 +5,7 @@ from ifa.engine import (
     run_monte_carlo_simulation,
     simulate_multi_pot_pension_path,
 )
-from ifa.events import build_required_withdrawals
+from ifa.events import build_annual_spending_schedule, build_required_withdrawals
 from ifa.market import generate_deterministic_sequences, generate_random_returns
 from ifa.metrics import summarize_monte_carlo, summarize_path
 from ifa.models import LumpSumEvent, SpendingStepEvent
@@ -19,6 +19,7 @@ __all__ = [
     "LumpSumEvent",
     "SpendingStepEvent",
     "build_required_withdrawals",
+    "build_annual_spending_schedule",
     "summarize_path",
     "summarize_monte_carlo",
 ]

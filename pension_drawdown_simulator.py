@@ -29,7 +29,7 @@ from ifa.engine import (
     run_monte_carlo_simulation,
     simulate_multi_pot_pension_path,
 )
-from ifa.events import build_required_withdrawals
+from ifa.events import build_annual_spending_schedule, build_required_withdrawals
 from ifa.market import generate_random_returns
 from ifa.metrics import summarize_monte_carlo, summarize_path
 from ifa.models import LifeEvent, LumpSumEvent, SpendingStepEvent
@@ -79,6 +79,19 @@ def _build_required_withdrawals_for_events(
         ages=ages,
         baseline_spending=baseline_spending,
         db_income=db_income,
+        events=events,
+    )
+
+
+def _build_annual_spending_schedule_for_events(
+    baseline_spending: float,
+    events: Sequence[LifeEvent],
+) -> np.ndarray:
+    """Build annual spending schedule for chart secondary axes."""
+    ages = np.arange(START_AGE, END_AGE + 1, dtype=np.int_)
+    return build_annual_spending_schedule(
+        ages=ages,
+        baseline_spending=baseline_spending,
         events=events,
     )
 
@@ -230,6 +243,10 @@ def main() -> None:
         baseline_spending=BASELINE_SPENDING,
         events=SCENARIO_EVENTS,
     )
+    scenario_annual_spending = _build_annual_spending_schedule_for_events(
+        baseline_spending=BASELINE_SPENDING,
+        events=SCENARIO_EVENTS,
+    )
     plot_sequence_of_returns_scenarios(
         INITIAL_TAX_FREE_POT,
         float(DC_POTS[0][1]),
@@ -243,6 +260,7 @@ def main() -> None:
         strategy,
         withdrawals_required=scenario_required,
         life_events=SCENARIO_EVENTS,
+        annual_spending_schedule=scenario_annual_spending,
         dc_pots=DC_POTS,
         output_file=output_dir / "sequence_scenarios.png",
     )
@@ -264,6 +282,7 @@ def main() -> None:
         RANDOM_SEED,
         withdrawals_required=scenario_required,
         life_events=SCENARIO_EVENTS,
+        annual_spending_schedule=scenario_annual_spending,
         dc_pots=DC_POTS,
         output_file=output_dir / "monte_carlo_fan.png",
     )
@@ -328,6 +347,7 @@ def main() -> None:
         RANDOM_SEED,
         withdrawals_required=scenario_required,
         life_events=SCENARIO_EVENTS,
+        annual_spending_schedule=scenario_annual_spending,
         dc_pots=DC_POTS,
         output_file=output_dir / "pots_stacked_area.png",
     )
