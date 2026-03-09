@@ -25,6 +25,26 @@ class DbPension:
 
 
 @dataclass(frozen=True)
+class LumpSumEvent:
+    """One-off real-terms spending increase at a specific age."""
+
+    age: int
+    amount: float
+
+
+@dataclass(frozen=True)
+class SpendingStepEvent:
+    """Persistent real-terms spending increase over an age range."""
+
+    start_age: int
+    extra_per_year: float
+    end_age: int | None = None
+
+
+LifeEvent = LumpSumEvent | SpendingStepEvent
+
+
+@dataclass(frozen=True)
 class Scenario:
     """Represents one simulation scenario configuration."""
 
@@ -35,6 +55,9 @@ class Scenario:
     secondary_dc_pot: float
     secondary_dc_drawdown_age: int | None
     db_pensions: tuple[DbPension, ...]
+    baseline_spending: float | None = None
+    events: tuple[LifeEvent, ...] = ()
+    withdrawals_required: NDArray[np.float64] | None = None
 
 
 @dataclass(frozen=True)

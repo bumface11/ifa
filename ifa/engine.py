@@ -46,7 +46,8 @@ def simulate_multi_pot_pension_path(
     start_age: int,
     end_age: int,
     returns: NDArray[np.float64],
-    drawdown_fn: DrawdownFn,
+    drawdown_fn: DrawdownFn | None = None,
+    withdrawals_required: NDArray[np.float64] | None = None,
 ) -> tuple[
     NDArray[np.int_],
     NDArray[np.float64],
@@ -68,6 +69,8 @@ def simulate_multi_pot_pension_path(
         end_age: Ending age for simulation.
         returns: Annual returns for each year in the projection.
         drawdown_fn: Strategy function returning desired annual withdrawal.
+        withdrawals_required: Optional required withdrawals aligned with ages.
+            When provided, these values are used directly (DB-adjusted spending).
 
     Returns:
         A tuple containing arrays for ages, balances, incomes, and withdrawals.
@@ -82,6 +85,12 @@ def simulate_multi_pot_pension_path(
         raise ValueError(
             "returns length must equal (end_age - start_age); "
             f"got {len(returns)} for {num_years - 1} years"
+        )
+
+    if withdrawals_required is not None and len(withdrawals_required) != num_years:
+        raise ValueError(
+            "withdrawals_required length must equal (end_age - start_age + 1); "
+            f"got {len(withdrawals_required)} for {num_years} ages"
         )
 
     total_balances = np.zeros(num_years, dtype=np.float64)
@@ -122,7 +131,16 @@ def simulate_multi_pot_pension_path(
         db_income_array[index] = db_income
 
         combined_dc = dc_balances[index] + secondary_dc_balances[index]
-        desired_withdrawal = drawdown_fn(current_age, float(combined_dc), state_dict)
+        if withdrawals_required is not None:
+            desired_withdrawal = float(withdrawals_required[index - 1])
+        elif drawdown_fn is not None:
+            desired_withdrawal = drawdown_fn(
+                current_age,
+                float(combined_dc),
+                state_dict,
+            )
+        else:
+            desired_withdrawal = 0.0
 
         current_withdrawal = 0.0
 
@@ -179,6 +197,7 @@ def run_monte_carlo_simulation(
     strategy_fn: DrawdownFn,
     num_simulations: int,
     seed: int,
+    withdrawals_required: NDArray[np.float64] | None = None,
 ) -> tuple[NDArray[np.int_], NDArray[np.float64]]:
     """Run Monte Carlo simulation for one strategy.
 
@@ -195,6 +214,7 @@ def run_monte_carlo_simulation(
         strategy_fn: Strategy function for annual withdrawals.
         num_simulations: Number of simulation paths.
         seed: RNG seed.
+        withdrawals_required: Optional required withdrawals aligned with ages.
 
     Returns:
         Ages array and matrix of path balances with shape
@@ -220,6 +240,7 @@ def run_monte_carlo_simulation(
             end_age,
             returns,
             strategy_fn,
+            withdrawals_required=withdrawals_required,
         )
         paths[simulation_index, :] = total_balances
 

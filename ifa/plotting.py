@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -21,6 +22,8 @@ from ifa.strategies import (
     create_fixed_real_drawdown_strategy,
     create_no_withdrawal_strategy,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _to_output_path(output_file: str | Path) -> Path:
@@ -176,7 +179,7 @@ def plot_pots_stacked_area(
     target = _to_output_path(output_file)
     plt.tight_layout()
     plt.savefig(target, dpi=150, bbox_inches="tight")
-    print(f"Saved: {target}")
+    LOGGER.info("Saved: %s", target)
     plt.close()
 
 
@@ -335,7 +338,7 @@ def plot_individual_pots_subplots(
     target = _to_output_path(output_file)
     plt.tight_layout()
     plt.savefig(target, dpi=150, bbox_inches="tight")
-    print(f"Saved: {target}")
+    LOGGER.info("Saved: %s", target)
     plt.close()
 
 
@@ -462,7 +465,7 @@ def plot_sequence_of_returns_scenarios(
     target = _to_output_path(output_file)
     plt.tight_layout()
     plt.savefig(target, dpi=150, bbox_inches="tight")
-    print(f"Saved: {target}")
+    LOGGER.info("Saved: %s", target)
     plt.close()
 
 
@@ -550,8 +553,8 @@ def plot_monte_carlo_fan_chart(
     target = _to_output_path(output_file)
     plt.tight_layout()
     plt.savefig(target, dpi=150, bbox_inches="tight")
-    print(f"Saved: {target}")
-    print(f"Risk metric: {zero_pct:.1f}% of simulations ran out of money.")
+    LOGGER.info("Saved: %s", target)
+    LOGGER.info("Risk metric: %.1f%% of simulations ran out of money.", zero_pct)
     plt.close()
 
 
@@ -644,5 +647,53 @@ def plot_multiple_drawdown_levels(
     target = _to_output_path(output_file)
     plt.tight_layout()
     plt.savefig(target, dpi=150, bbox_inches="tight")
-    print(f"Saved: {target}")
+    LOGGER.info("Saved: %s", target)
+    plt.close()
+
+
+def plot_baseline_vs_scenario_balances(
+    ages: np.ndarray,
+    baseline_balances: np.ndarray,
+    scenario_balances: np.ndarray,
+    output_file: str | Path = "baseline_vs_scenario.png",
+) -> None:
+    """Plot baseline and life-event scenario balances on one comparison chart."""
+    fig, ax = plt.subplots(figsize=(12, 7))
+    ax.plot(
+        ages,
+        baseline_balances,
+        linewidth=2.5,
+        color="#1F77B4",
+        marker="o",
+        markersize=4,
+        label="Baseline (no life events)",
+    )
+    ax.plot(
+        ages,
+        scenario_balances,
+        linewidth=2.5,
+        color="#D62728",
+        marker="s",
+        markersize=4,
+        label="Scenario (with life events)",
+    )
+
+    ax.axhline(y=0, color="black", linestyle=":", linewidth=1.3, alpha=0.6)
+    ax.set_xlabel("Age", fontsize=12, fontweight="bold")
+    ax.set_ylabel("Total Balance (GBP)", fontsize=12, fontweight="bold")
+    ax.set_title(
+        "Baseline vs Life-Event Scenario\n(Real-terms pension pot trajectory)",
+        fontsize=14,
+        fontweight="bold",
+    )
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=10, loc="best")
+    ax.yaxis.set_major_formatter(
+        plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
+    )
+
+    target = _to_output_path(output_file)
+    plt.tight_layout()
+    plt.savefig(target, dpi=150, bbox_inches="tight")
+    LOGGER.info("Saved: %s", target)
     plt.close()

@@ -9,7 +9,9 @@ from ifa.engine import (
     run_monte_carlo_simulation,
     simulate_multi_pot_pension_path,
 )
+from ifa.events import build_required_withdrawals
 from ifa.market import generate_random_returns
+from ifa.models import LumpSumEvent
 from ifa.strategies import create_fixed_real_drawdown_strategy
 
 
@@ -144,3 +146,53 @@ def test_determinism_with_fixed_seed_and_fixed_returns() -> None:
     assert np.allclose(path_a[6], path_b[6])
     assert np.array_equal(mc_ages_a, mc_ages_b)
     assert np.allclose(mc_paths_a, mc_paths_b)
+
+
+def test_lump_sum_event_reduces_balances_vs_baseline_on_same_returns() -> None:
+    """A life-event lump sum should lower balances versus baseline on same path."""
+    # Arrange
+    start_age = 60
+    end_age = 66
+    ages = np.arange(start_age, end_age + 1, dtype=np.int_)
+    returns = np.zeros(end_age - start_age, dtype=np.float64)
+    db_income = np.zeros_like(ages, dtype=np.float64)
+
+    baseline_required = build_required_withdrawals(
+        ages=ages,
+        baseline_spending=10_000.0,
+        db_income=db_income,
+        events=(),
+    )
+    scenario_required = build_required_withdrawals(
+        ages=ages,
+        baseline_spending=10_000.0,
+        db_income=db_income,
+        events=(LumpSumEvent(age=63, amount=15_000.0),),
+    )
+
+    # Act
+    _, baseline_total, *_ = simulate_multi_pot_pension_path(
+        tax_free_pot=25_000.0,
+        dc_pot=120_000.0,
+        secondary_dc_pot=0.0,
+        secondary_dc_drawdown_age=None,
+        db_pensions=[],
+        start_age=start_age,
+        end_age=end_age,
+        returns=returns,
+        withdrawals_required=baseline_required,
+    )
+    _, scenario_total, *_ = simulate_multi_pot_pension_path(
+        tax_free_pot=25_000.0,
+        dc_pot=120_000.0,
+        secondary_dc_pot=0.0,
+        secondary_dc_drawdown_age=None,
+        db_pensions=[],
+        start_age=start_age,
+        end_age=end_age,
+        returns=returns,
+        withdrawals_required=scenario_required,
+    )
+
+    # Assert
+    assert scenario_total[-1] < baseline_total[-1]
