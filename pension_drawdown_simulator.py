@@ -68,8 +68,9 @@ def run_life_events_comparison(output_dir: Path) -> None:
     baseline_spending = 30_000.0
     scenario_events = (
         LumpSumEvent(age=55, amount=200_000.0),
-        LumpSumEvent(age=70, amount=18_000.0),
+        LumpSumEvent(age=60, amount=40_000.0),
         SpendingStepEvent(start_age=78, extra_per_year=16_000.0),
+        SpendingStepEvent(start_age=70, extra_per_year=4_000.0),
     )
 
     baseline_required = build_required_withdrawals(
