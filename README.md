@@ -83,6 +83,8 @@ pots and start ages.
 - Monte Carlo fan chart with ruin probability.
 - Pot composition charts (stacked and per-pot subplots), with a short guide
   before the charts to explain what each view does.
+- The individual-pots view shows tax-free, combined DC, and total-pot balance
+  panels, plus a dedicated DB income timeline panel.
 - The first four charts include a secondary axis for spending drawdown
   (spending requirement minus DB income).
 - Plain-English explanation of scenario impact.

@@ -436,6 +436,8 @@ def plot_individual_pots_subplots(
         dc_pots=dc_pots,
     )
 
+    combined_dc_balances = dc_balances + secondary_dc_balances
+
     fig, axes = plt.subplots(2, 2, figsize=(15, 10))
 
     ax = axes[0, 0]
@@ -454,9 +456,16 @@ def plot_individual_pots_subplots(
     _apply_numeric_text_scale(ax)
 
     ax = axes[0, 1]
-    ax.plot(ages, dc_balances, linewidth=3, color="#3498DB", marker="s", markersize=4)
-    ax.fill_between(ages, 0, dc_balances, alpha=0.3, color="#3498DB")
-    ax.set_title("Main DC Pot (Drawing from age 55)", fontsize=12, fontweight="bold")
+    ax.plot(
+        ages,
+        combined_dc_balances,
+        linewidth=3,
+        color="#3498DB",
+        marker="s",
+        markersize=4,
+    )
+    ax.fill_between(ages, 0, combined_dc_balances, alpha=0.3, color="#3498DB")
+    ax.set_title("Combined DC Pots", fontsize=12, fontweight="bold")
     ax.set_ylabel("Balance (£)", fontsize=11, fontweight="bold")
     ax.grid(True, alpha=0.3)
     ax.yaxis.set_major_formatter(
@@ -467,62 +476,14 @@ def plot_individual_pots_subplots(
     ax = axes[1, 0]
     ax.plot(
         ages,
-        secondary_dc_balances,
-        linewidth=3,
-        color="#9B59B6",
-        marker="^",
-        markersize=4,
-    )
-    ax.fill_between(ages, 0, secondary_dc_balances, alpha=0.3, color="#9B59B6")
-    ax.set_title("Secondary DC Pot (Grows then Draws)", fontsize=12, fontweight="bold")
-    ax.set_xlabel("Age", fontsize=11, fontweight="bold")
-    ax.set_ylabel("Balance (£)", fontsize=11, fontweight="bold")
-    ax.grid(True, alpha=0.3)
-    ax.yaxis.set_major_formatter(
-        plt.FuncFormatter(lambda value, _: f"£{value / 1000:.0f}k")
-    )
-    _apply_numeric_text_scale(ax)
-
-    ax = axes[1, 1]
-    ax.plot(
-        ages,
         total_balances,
         linewidth=3,
         color="black",
-        label="Total Pot",
-        marker="o",
+        marker="^",
         markersize=4,
     )
     ax.fill_between(ages, 0, total_balances, alpha=0.2, color="gray")
-
-    if len(db_pensions) > 0:
-        ax_secondary = ax.twinx()
-        ax_secondary.step(
-            ages,
-            db_income,
-            linewidth=2.5,
-            color="#E74C3C",
-            label="DB Pension Income",
-            where="post",
-        )
-        ax_secondary.set_ylabel(
-            "Annual DB Income (£)", fontsize=11, fontweight="bold", color="#E74C3C"
-        )
-        ax_secondary.tick_params(axis="y", labelcolor="#E74C3C")
-        ax_secondary.yaxis.set_major_formatter(
-            plt.FuncFormatter(lambda value, _: f"£{value / 1000:.0f}k")
-        )
-        _apply_numeric_text_scale(ax_secondary)
-
-        lines1, labels1 = ax.get_legend_handles_labels()
-        lines2, labels2 = ax_secondary.get_legend_handles_labels()
-        ax.legend(lines1 + lines2, labels1 + labels2, fontsize=10, loc="upper left")
-    else:
-        ax.legend(fontsize=10)
-
-    ax.set_title(
-        "Total Pot + DB Pension Income Timeline", fontsize=12, fontweight="bold"
-    )
+    ax.set_title("Total Pot", fontsize=12, fontweight="bold")
     ax.set_xlabel("Age", fontsize=11, fontweight="bold")
     ax.set_ylabel("Total Balance (£)", fontsize=11, fontweight="bold")
     ax.grid(True, alpha=0.3)
@@ -531,9 +492,29 @@ def plot_individual_pots_subplots(
     )
     _apply_numeric_text_scale(ax)
 
+    ax = axes[1, 1]
+    ax.step(
+        ages,
+        db_income,
+        linewidth=2.5,
+        color="#E74C3C",
+        label="DB Pension Income",
+        where="post",
+    )
+    ax.fill_between(ages, 0, db_income, step="post", alpha=0.2, color="#E74C3C")
+    ax.set_title("DB Pension Income Timeline", fontsize=12, fontweight="bold")
+    ax.set_xlabel("Age", fontsize=11, fontweight="bold")
+    ax.set_ylabel("Annual DB Income (£)", fontsize=11, fontweight="bold")
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=10, loc="upper left")
+    ax.yaxis.set_major_formatter(
+        plt.FuncFormatter(lambda value, _: f"£{value / 1000:.0f}k")
+    )
+    _apply_numeric_text_scale(ax)
+
     fig.suptitle(
         "Individual Pension Pots Evolution\n"
-        "(DB pension income shown on secondary axis, right plot; "
+        "(combined DC view, dedicated DB income panel; "
         f"{'life events active' if len(life_events) > 0 else 'no life events'})",
         fontsize=14,
         fontweight="bold",
@@ -550,14 +531,16 @@ def plot_individual_pots_subplots(
     )
 
     all_axes = [axes[0, 0], axes[0, 1], axes[1, 0], axes[1, 1]]
-    notes_axis = axes[1, 1]
 
-    for axis in all_axes:
-        _draw_sorted_event_annotations(axis, event_entries, show_note_markers=True)
-
-    notes = _draw_sorted_event_annotations(
-        notes_axis, event_entries, show_note_markers=True
-    )
+    notes: list[str] = []
+    for axis_index, axis in enumerate(all_axes):
+        axis_notes = _draw_sorted_event_annotations(
+            axis,
+            event_entries,
+            show_note_markers=True,
+        )
+        if axis_index == 0:
+            notes = axis_notes
 
     _add_notes_box(fig, notes)
     if save_output:

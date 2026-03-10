@@ -643,7 +643,7 @@ def main() -> None:
         output_file=output_dir / "pots_individual_streamlit.png",
     )
     if individual_fig is not None:
-        st.markdown("### Individual Pots (4 Panels)")
+        st.markdown("### Pot and Income Panels (4 Panels)")
         st.pyplot(individual_fig, clear_figure=True)
 
 
