@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Final
 
-INITIAL_TAX_FREE_POT: Final[float] = 373_890
-INITIAL_DC_POT: Final[float] = 300_000
+INITIAL_TAX_FREE_POT: Final[float] = 173_890
+INITIAL_DC_POT: Final[float] = 100_000
 SECONDARY_DC_POT: Final[float] = 65_000
 PRIMARY_DC_DRAWDOWN_AGE: Final[int] = 57
 SECONDARY_DC_DRAWDOWN_AGE: Final[int] = 65
