@@ -36,7 +36,129 @@ from ifa.plotting import (
     plot_pots_stacked_area,
     plot_sequence_of_returns_scenarios,
 )
+from ifa.presets import (
+    build_default_preset_name,
+    list_preset_files,
+    load_preset,
+    rename_preset,
+    save_preset,
+)
 from ifa.strategies import create_fixed_real_drawdown_strategy
+
+_TRACKED_STATIC_KEYS: tuple[str, ...] = (
+    "start_age_input",
+    "end_age_input",
+    "tax_free_pot_input",
+    "baseline_spending_input",
+    "mean_return_input",
+    "std_return_input",
+    "random_seed_input",
+    "num_simulations_input",
+    "save_outputs_input",
+    "dc_pot_count",
+    "db_stream_count",
+    "lump_count",
+    "step_count",
+)
+
+
+def _ensure_sidebar_defaults() -> None:
+    """Initialize sidebar widget defaults in session state once."""
+    defaults: dict[str, int | float | bool | str] = {
+        "start_age_input": START_AGE,
+        "end_age_input": END_AGE,
+        "tax_free_pot_input": float(INITIAL_TAX_FREE_POT),
+        "baseline_spending_input": 30_000.0,
+        "mean_return_input": MEAN_RETURN,
+        "std_return_input": STD_RETURN,
+        "random_seed_input": RANDOM_SEED,
+        "num_simulations_input": NUM_SIMULATIONS,
+        "save_outputs_input": False,
+        "dc_pot_count": max(1, len(DC_POTS)),
+        "db_stream_count": len(DB_PENSIONS),
+        "lump_count": 1,
+        "step_count": 1,
+        "preset_name_input": build_default_preset_name(),
+        "preset_selected": "(none)",
+        "rename_preset_name_input": "",
+    }
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+
+def _apply_pending_sidebar_updates() -> None:
+    """Apply deferred sidebar state updates before widget instantiation."""
+    loaded_state = st.session_state.pop("_loaded_sidebar_state", None)
+    if isinstance(loaded_state, dict):
+        _apply_sidebar_state(loaded_state)
+
+    pending_selected = st.session_state.pop("_pending_preset_selected", None)
+    if isinstance(pending_selected, str):
+        st.session_state["preset_selected"] = pending_selected
+
+    pending_name = st.session_state.pop("_pending_preset_name", None)
+    if isinstance(pending_name, str):
+        st.session_state["preset_name_input"] = pending_name
+
+    pending_rename_name = st.session_state.pop("_pending_rename_name", None)
+    if isinstance(pending_rename_name, str):
+        st.session_state["rename_preset_name_input"] = pending_rename_name
+
+
+def _tracked_dynamic_keys() -> list[str]:
+    """Build the dynamic widget-key list based on current item counts."""
+    keys: list[str] = []
+    pot_count = int(st.session_state.get("dc_pot_count", max(1, len(DC_POTS))))
+    for index in range(max(0, pot_count)):
+        keys.extend(
+            [
+                f"dc_name_{index}",
+                f"dc_start_age_{index}",
+                f"dc_initial_balance_{index}",
+            ]
+        )
+
+    db_count = int(st.session_state.get("db_stream_count", len(DB_PENSIONS)))
+    for index in range(max(0, db_count)):
+        keys.extend([f"db_name_{index}", f"db_age_{index}", f"db_amount_{index}"])
+
+    lump_count = int(st.session_state.get("lump_count", 1))
+    for index in range(max(0, lump_count)):
+        keys.extend([f"lump_name_{index}", f"lump_age_{index}", f"lump_amount_{index}"])
+
+    step_count = int(st.session_state.get("step_count", 1))
+    for index in range(max(0, step_count)):
+        keys.extend(
+            [
+                f"step_name_{index}",
+                f"step_start_{index}",
+                f"step_amount_{index}",
+                f"step_has_end_{index}",
+                f"step_end_{index}",
+            ]
+        )
+    return keys
+
+
+def _collect_sidebar_state() -> dict[str, str | int | float | bool | None]:
+    """Collect tracked sidebar widget values from session state."""
+    state: dict[str, str | int | float | bool | None] = {}
+    for key in [*_TRACKED_STATIC_KEYS, *_tracked_dynamic_keys()]:
+        if key not in st.session_state:
+            continue
+        value = st.session_state[key]
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            state[key] = value
+    return state
+
+
+def _apply_sidebar_state(
+    state: dict[str, str | int | float | bool | None],
+) -> None:
+    """Apply loaded sidebar values into Streamlit session state."""
+    for key, value in state.items():
+        st.session_state[key] = value
 
 
 def _build_db_income(
@@ -49,8 +171,11 @@ def _build_db_income(
     )
 
 
-def _build_dc_pots(start_age: int, end_age: int) -> list[tuple[int, float]]:
-    """Collect DC pot balances and drawdown start ages from active container."""
+def _build_dc_pots(
+    start_age: int,
+    end_age: int,
+) -> tuple[list[tuple[int, float]], list[str]]:
+    """Collect DC pot balances, names, and drawdown start ages."""
     st.markdown("DC Pots")
     default_count = len(DC_POTS)
     pot_count = int(
@@ -59,11 +184,13 @@ def _build_dc_pots(start_age: int, end_age: int) -> list[tuple[int, float]]:
             min_value=1,
             max_value=6,
             value=max(1, default_count),
+            key="dc_pot_count",
             help="Each DC pot can have its own drawdown start age.",
         )
     )
 
     pots: list[tuple[int, float]] = []
+    pot_names: list[str] = []
     for index in range(pot_count):
         if index < default_count:
             default_start_age = int(DC_POTS[index][0])
@@ -75,6 +202,12 @@ def _build_dc_pots(start_age: int, end_age: int) -> list[tuple[int, float]]:
             default_start_age = max(start_age, 57)
             default_balance = 0.0
 
+        pot_name = st.text_input(
+            f"DC pot #{index + 1} name",
+            value=f"DC Pot {index + 1}",
+            key=f"dc_name_{index}",
+            help="Default name can be edited to anything you prefer.",
+        )
         drawdown_start_age = int(
             st.number_input(
                 f"DC pot #{index + 1} drawdown start age",
@@ -95,16 +228,18 @@ def _build_dc_pots(start_age: int, end_age: int) -> list[tuple[int, float]]:
             )
         )
         pots.append((drawdown_start_age, initial_balance))
+        pot_names.append(pot_name.strip() or f"DC Pot {index + 1}")
 
-    return pots
+    return pots, pot_names
 
 
 def _build_life_events(
     start_age: int,
     end_age: int,
-) -> tuple[LifeEvent, ...]:
+) -> tuple[tuple[LifeEvent, ...], list[str]]:
     """Collect life events from active Streamlit container inputs."""
     life_events: list[LifeEvent] = []
+    life_event_names: list[str] = []
 
     st.markdown("Life Events")
     lump_count = int(
@@ -113,10 +248,17 @@ def _build_life_events(
             min_value=0,
             max_value=5,
             value=1,
+            key="lump_count",
             help="How many one-off spending events you want to model.",
         )
     )
     for index in range(lump_count):
+        event_name = st.text_input(
+            f"Lump-sum event #{index + 1} name",
+            value=f"Lump Sum {index + 1}",
+            key=f"lump_name_{index}",
+            help="Default name can be edited to anything you prefer.",
+        )
         st.markdown(f"Lump sum #{index + 1}")
         lump_age = int(
             st.number_input(
@@ -140,6 +282,7 @@ def _build_life_events(
         )
         if lump_amount > 0.0:
             life_events.append(LumpSumEvent(age=lump_age, amount=lump_amount))
+            life_event_names.append(event_name.strip() or f"Lump Sum {index + 1}")
 
     step_count = int(
         st.number_input(
@@ -147,10 +290,17 @@ def _build_life_events(
             min_value=0,
             max_value=5,
             value=1,
+            key="step_count",
             help="How many ongoing extra yearly costs you want to model.",
         )
     )
     for index in range(step_count):
+        event_name = st.text_input(
+            f"Spending-step event #{index + 1} name",
+            value=f"Spending Step {index + 1}",
+            key=f"step_name_{index}",
+            help="Default name can be edited to anything you prefer.",
+        )
         st.markdown(f"Spending step #{index + 1}")
         step_start = int(
             st.number_input(
@@ -199,12 +349,18 @@ def _build_life_events(
                     end_age=step_end,
                 )
             )
+            life_event_names.append(
+                event_name.strip() or f"Spending Step {index + 1}"
+            )
 
-    return tuple(life_events)
+    return tuple(life_events), life_event_names
 
 
-def _build_db_pensions(start_age: int, end_age: int) -> list[tuple[int, float]]:
-    """Collect DB pension inputs from the active Streamlit container."""
+def _build_db_pensions(
+    start_age: int,
+    end_age: int,
+) -> tuple[list[tuple[int, float]], list[str]]:
+    """Collect DB pension inputs and names from the active container."""
     st.markdown("DB Pensions")
     default_streams = len(DB_PENSIONS)
     stream_count = int(
@@ -213,13 +369,21 @@ def _build_db_pensions(start_age: int, end_age: int) -> list[tuple[int, float]]:
             min_value=0,
             max_value=6,
             value=default_streams,
+            key="db_stream_count",
             help="How many defined-benefit pension income streams you receive.",
         )
     )
     pensions: list[tuple[int, float]] = []
+    pension_names: list[str] = []
     for index in range(stream_count):
         default_age = DB_PENSIONS[index][0] if index < default_streams else start_age
         default_amount = DB_PENSIONS[index][1] if index < default_streams else 10_000.0
+        pension_name = st.text_input(
+            f"DB stream name #{index + 1}",
+            value=f"DB Pension {index + 1}",
+            key=f"db_name_{index}",
+            help="Default name can be edited to anything you prefer.",
+        )
         stream_age = int(
             st.number_input(
                 f"DB start age #{index + 1}",
@@ -241,7 +405,8 @@ def _build_db_pensions(start_age: int, end_age: int) -> list[tuple[int, float]]:
             )
         )
         pensions.append((stream_age, stream_amount))
-    return pensions
+        pension_names.append(pension_name.strip() or f"DB Pension {index + 1}")
+    return pensions, pension_names
 
 
 def main() -> None:
@@ -319,15 +484,112 @@ def main() -> None:
         " with plain-English explanations."
     )
 
+    run_model = st.button("Run simulation", type="primary")
+
+    _ensure_sidebar_defaults()
+    _apply_pending_sidebar_updates()
+
+    preset_dir = Path("saved_parameters")
+    preset_files = list_preset_files(preset_dir)
+    preset_map = {preset_path.stem: preset_path for preset_path in preset_files}
+    preset_options = ["(none)", *preset_map.keys()]
+    if st.session_state.get("preset_selected") not in preset_options:
+        st.session_state["preset_selected"] = "(none)"
+
+    st.sidebar.header("Saved Parameter Sets")
+    with st.sidebar.container():
+        notice = st.session_state.pop("_preset_notice", None)
+        if isinstance(notice, str) and len(notice) > 0:
+            st.success(notice)
+
+        st.text_input(
+            "Preset name",
+            key="preset_name_input",
+            help=(
+                "A default name is provided automatically. You can override it "
+                "when saving or change it later by renaming a saved preset."
+            ),
+        )
+        selected_preset = st.selectbox(
+            "Locally saved parameter sets",
+            options=preset_options,
+            key="preset_selected",
+        )
+
+        save_column, load_column = st.columns(2)
+        with save_column:
+            if st.button("Save current", key="save_params_button"):
+                saved_path = save_preset(
+                    preset_dir=preset_dir,
+                    preset_name=str(st.session_state.get("preset_name_input", "")),
+                    sidebar_state=_collect_sidebar_state(),
+                )
+                st.session_state["_pending_preset_selected"] = saved_path.stem
+                st.session_state["_preset_notice"] = (
+                    f"Saved preset: {saved_path.stem}"
+                )
+                st.rerun()
+
+        with load_column:
+            if st.button("Load selected", key="load_params_button"):
+                if selected_preset == "(none)":
+                    st.warning("Choose a preset from the list before loading.")
+                else:
+                    loaded_name, loaded_state = load_preset(
+                        preset_map[selected_preset]
+                    )
+                    st.session_state["_loaded_sidebar_state"] = loaded_state
+                    st.session_state["_pending_preset_name"] = loaded_name
+                    st.session_state["_pending_preset_selected"] = selected_preset
+                    st.session_state["_preset_notice"] = (
+                        f"Loaded preset: {selected_preset}"
+                    )
+                    st.rerun()
+
+        st.text_input(
+            "Rename selected preset to",
+            key="rename_preset_name_input",
+            placeholder="Enter new preset name",
+        )
+        if st.button("Rename selected", key="rename_preset_button"):
+            if selected_preset == "(none)":
+                st.warning("Choose a preset from the list before renaming.")
+            else:
+                new_name = str(
+                    st.session_state.get("rename_preset_name_input", "")
+                ).strip()
+                if len(new_name) == 0:
+                    st.warning("Enter a new name before renaming.")
+                else:
+                    renamed_path = rename_preset(
+                        preset_path=preset_map[selected_preset],
+                        new_name=new_name,
+                    )
+                    st.session_state["_pending_preset_name"] = new_name
+                    st.session_state["_pending_preset_selected"] = renamed_path.stem
+                    st.session_state["_pending_rename_name"] = ""
+                    st.session_state["_preset_notice"] = (
+                        f"Renamed preset to: {renamed_path.stem}"
+                    )
+                    st.rerun()
+
     st.sidebar.header("Core Inputs")
     start_age = int(
         st.sidebar.number_input(
-            "Start age", min_value=40, max_value=85, value=START_AGE
+            "Start age",
+            min_value=40,
+            max_value=85,
+            value=START_AGE,
+            key="start_age_input",
         )
     )
     end_age = int(
         st.sidebar.number_input(
-            "End age", min_value=start_age + 5, max_value=110, value=END_AGE
+            "End age",
+            min_value=start_age + 5,
+            max_value=110,
+            value=END_AGE,
+            key="end_age_input",
         )
     )
 
@@ -337,6 +599,7 @@ def main() -> None:
             min_value=0.0,
             value=float(INITIAL_TAX_FREE_POT),
             step=1_000.0,
+            key="tax_free_pot_input",
         )
     )
 
@@ -346,6 +609,7 @@ def main() -> None:
             min_value=0.0,
             value=30_000.0,
             step=1_000.0,
+            key="baseline_spending_input",
             help=(
                 "Your planned yearly spending in today's money before adding "
                 "life events."
@@ -362,6 +626,7 @@ def main() -> None:
             value=MEAN_RETURN,
             step=0.005,
             format="%.3f",
+            key="mean_return_input",
             help=(
                 "Expected average yearly investment return after inflation. "
                 "Example: 0.04 means 4%."
@@ -376,6 +641,7 @@ def main() -> None:
             value=STD_RETURN,
             step=0.005,
             format="%.3f",
+            key="std_return_input",
             help=(
                 "How much returns can swing up and down each year. "
                 "Higher means more uncertainty."
@@ -387,6 +653,7 @@ def main() -> None:
             "Random seed",
             min_value=0,
             value=RANDOM_SEED,
+            key="random_seed_input",
             help=(
                 "A fixed number that makes random scenarios repeatable so you "
                 "can compare changes fairly."
@@ -400,6 +667,7 @@ def main() -> None:
             max_value=10_000,
             value=NUM_SIMULATIONS,
             step=100,
+            key="num_simulations_input",
             help=(
                 "How many random market paths to test. More paths give a more "
                 "stable estimate but run slower."
@@ -407,18 +675,21 @@ def main() -> None:
         )
     )
 
-    save_outputs = st.sidebar.checkbox("Save PNG outputs to output/", value=False)
+    save_outputs = st.sidebar.checkbox(
+        "Save PNG outputs to output/",
+        value=False,
+        key="save_outputs_input",
+    )
 
     with st.sidebar.expander("DC Pot Inputs", expanded=False):
-        dc_pots = _build_dc_pots(start_age, end_age)
+        dc_pots, dc_pot_names = _build_dc_pots(start_age, end_age)
 
     with st.sidebar.expander("DB Pension Inputs", expanded=False):
-        db_pensions = _build_db_pensions(start_age, end_age)
+        db_pensions, db_pension_names = _build_db_pensions(start_age, end_age)
 
     with st.sidebar.expander("Life Event Inputs", expanded=False):
-        life_events = _build_life_events(start_age, end_age)
+        life_events, life_event_names = _build_life_events(start_age, end_age)
 
-    run_model = st.sidebar.button("Run simulation", type="primary")
     if not run_model:
         st.info("Set assumptions in the sidebar, then click Run simulation.")
         return
@@ -522,6 +793,7 @@ def main() -> None:
         scenario_metrics=scenario_metrics,
         monte_carlo_metrics=monte_carlo_metrics,
         events=life_events,
+        event_names=life_event_names,
     )
     st.markdown("### Plain-English Summary")
     st.write(explanation)
@@ -535,6 +807,9 @@ def main() -> None:
         db_pensions=db_pensions,
         life_events=life_events,
         dc_pots=dc_pots,
+        dc_pot_names=dc_pot_names,
+        db_pension_names=db_pension_names,
+        life_event_names=life_event_names,
         save_output=save_outputs,
         return_figure=True,
         output_file=output_dir / "baseline_vs_scenario_streamlit.png",
@@ -558,6 +833,9 @@ def main() -> None:
         life_events=life_events,
         spending_drawdown_schedule=spending_drawdown_schedule,
         dc_pots=dc_pots,
+        dc_pot_names=dc_pot_names,
+        db_pension_names=db_pension_names,
+        life_event_names=life_event_names,
         save_output=save_outputs,
         return_figure=True,
         output_file=output_dir / "sequence_scenarios_streamlit.png",
@@ -583,6 +861,9 @@ def main() -> None:
         life_events=life_events,
         spending_drawdown_schedule=spending_drawdown_schedule,
         dc_pots=dc_pots,
+        dc_pot_names=dc_pot_names,
+        db_pension_names=db_pension_names,
+        life_event_names=life_event_names,
         save_output=save_outputs,
         return_figure=True,
         output_file=output_dir / "monte_carlo_fan_streamlit.png",
@@ -615,6 +896,9 @@ def main() -> None:
         life_events=life_events,
         spending_drawdown_schedule=spending_drawdown_schedule,
         dc_pots=dc_pots,
+        dc_pot_names=dc_pot_names,
+        db_pension_names=db_pension_names,
+        life_event_names=life_event_names,
         save_output=save_outputs,
         return_figure=True,
         output_file=output_dir / "pots_stacked_streamlit.png",
@@ -638,6 +922,9 @@ def main() -> None:
         withdrawals_required=scenario_required,
         life_events=life_events,
         dc_pots=dc_pots,
+        dc_pot_names=dc_pot_names,
+        db_pension_names=db_pension_names,
+        life_event_names=life_event_names,
         save_output=save_outputs,
         return_figure=True,
         output_file=output_dir / "pots_individual_streamlit.png",

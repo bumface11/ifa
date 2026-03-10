@@ -97,6 +97,16 @@ pots and start ages.
   scrolling in the control panel.
 - Collapsible `DC Pot Inputs` section supporting multiple DC pots with per-pot
   drawdown start ages.
+- Sidebar parameter presets that can be saved locally, loaded from a list, and
+  renamed after creation.
+- Editable name fields for each DC pot and each life event, with sensible
+  default names.
+- Editable name fields for each DB pension stream, with sensible defaults.
+- Chart notes and plain-English explanations use your custom pot/event/DB names
+  instead of generic labels.
+- The sidebar saved-parameters section is placed at the top of the sidebar.
+- The `Run simulation` button is placed near the top of the page for quicker
+  access.
 - Theme-aware text styling so sidebar labels and expand/collapse controls stay
   readable in dark mode.
 - Streamlit theme-variable-based styling so both text contrast and background

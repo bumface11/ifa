@@ -14,6 +14,7 @@ This project is organized so each part does one job.
 - `ifa/metrics.py`: summary statistics.
 - `ifa/explain.py`: plain-English explanation text.
 - `ifa/plotting.py`: matplotlib chart builders.
+- `ifa/presets.py`: local save/load/rename helpers for Streamlit sidebar presets.
 
 ```mermaid
 flowchart TD
@@ -22,6 +23,7 @@ flowchart TD
     UI --> Plotting[ifa.plotting]
     UI --> Metrics[ifa.metrics]
     UI --> Explain[ifa.explain]
+    UI --> Presets[ifa.presets]
 
     CLI[pension_drawdown_simulator.py CLI] --> Events
     CLI --> Engine
@@ -45,6 +47,7 @@ The same simulation pipeline is used by both CLI and Streamlit.
 4. Generate market returns (single path or many Monte Carlo paths).
 5. Simulate pot balances over time.
 6. Summarize results and render charts.
+7. Optionally persist or restore sidebar parameters via local presets.
 
 ```mermaid
 flowchart LR
@@ -54,6 +57,7 @@ flowchart LR
     D --> E[Path balances]
     E --> F[summarize_path]
     E --> G[plot_* charts]
+    A --> K[save/load preset in ifa.presets]
 
     H[run_monte_carlo_simulation] --> I[Monte Carlo paths]
     I --> J[summarize_monte_carlo]

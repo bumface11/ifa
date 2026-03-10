@@ -13,6 +13,7 @@ def build_plain_english_explanation(
     scenario_metrics: PathMetrics,
     monte_carlo_metrics: MonteCarloMetrics,
     events: Sequence[LifeEvent],
+    event_names: Sequence[str] | None = None,
 ) -> str:
     """Build a short plain-English explanation of scenario impact.
 
@@ -21,27 +22,52 @@ def build_plain_english_explanation(
         scenario_metrics: Deterministic scenario path summary.
         monte_carlo_metrics: Monte Carlo summary for the active scenario.
         events: Life events included in the scenario.
+        event_names: Optional custom names aligned to ``events`` order.
 
     Returns:
         Human-readable explanation describing what changed and why it matters.
     """
     event_parts: list[str] = []
-    for event in events:
+    for event_index, event in enumerate(events):
+        event_name = (
+            event_names[event_index]
+            if event_names is not None and event_index < len(event_names)
+            else None
+        )
         if isinstance(event, LumpSumEvent):
-            event_parts.append(
-                f"a one-off cost of £{event.amount:,.0f} at age {event.age}"
-            )
+            if event_name is None:
+                event_parts.append(
+                    f"a one-off cost of £{event.amount:,.0f} at age {event.age}"
+                )
+            else:
+                event_parts.append(
+                    f"{event_name}: one-off cost of £{event.amount:,.0f} "
+                    f"at age {event.age}"
+                )
         elif event.end_age is None:
-            event_parts.append(
-                "an ongoing extra cost of "
-                f"£{event.extra_per_year:,.0f}/year from age {event.start_age}"
-            )
+            if event_name is None:
+                event_parts.append(
+                    "an ongoing extra cost of "
+                    f"£{event.extra_per_year:,.0f}/year from age {event.start_age}"
+                )
+            else:
+                event_parts.append(
+                    f"{event_name}: ongoing extra cost of "
+                    f"£{event.extra_per_year:,.0f}/year from age {event.start_age}"
+                )
         else:
-            event_parts.append(
-                "an ongoing extra cost of "
-                f"£{event.extra_per_year:,.0f}/year from age {event.start_age} "
-                f"to {event.end_age}"
-            )
+            if event_name is None:
+                event_parts.append(
+                    "an ongoing extra cost of "
+                    f"£{event.extra_per_year:,.0f}/year from age {event.start_age} "
+                    f"to {event.end_age}"
+                )
+            else:
+                event_parts.append(
+                    f"{event_name}: ongoing extra cost of "
+                    f"£{event.extra_per_year:,.0f}/year from age {event.start_age} "
+                    f"to {event.end_age}"
+                )
 
     if len(event_parts) == 0:
         event_summary = "No life events were added"

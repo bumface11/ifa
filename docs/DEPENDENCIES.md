@@ -7,6 +7,7 @@ This page shows how modules depend on each other.
 - `numpy`: numeric arrays and random returns.
 - `matplotlib`: charts.
 - `streamlit`: web app UI.
+- `orjson`: fast local JSON serialization for saved sidebar parameter presets.
 - `pandas`: currently installed as a project dependency.
 
 ## Internal Import Diagram
@@ -20,6 +21,7 @@ flowchart TD
     Web --> Metrics[ifa.metrics]
     Web --> Explain[ifa.explain]
     Web --> Plotting[ifa.plotting]
+    Web --> Presets[ifa.presets]
 
     CLI[pension_drawdown_simulator.py] --> Config
     CLI --> Models
@@ -52,6 +54,8 @@ graph LR
     Plotting --> CLI[pension_drawdown_simulator.py]
 
     Streamlit[streamlit] --> Web
+    Orjson[orjson] --> Presets[ifa.presets]
+    Presets --> Web
     Pandas[pandas] --> Project[ifa project]
 ```
 

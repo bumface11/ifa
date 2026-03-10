@@ -156,6 +156,8 @@ def _collect_standard_event_entries(
     start_age: int,
     end_age: int,
     dc_pots: Sequence[DcPotInput] | None = None,
+    dc_pot_names: Sequence[str] | None = None,
+    db_pension_names: Sequence[str] | None = None,
 ) -> list[tuple[int, str, str]]:
     """Collect standard pension events as (age, note, color)."""
     colors_event = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A"]
@@ -169,10 +171,15 @@ def _collect_standard_event_entries(
             else:
                 drawdown_age = int(pot.drawdown_start_age)
             if start_age <= drawdown_age <= end_age:
+                pot_name = (
+                    dc_pot_names[pot_index - 1]
+                    if dc_pot_names is not None and pot_index - 1 < len(dc_pot_names)
+                    else f"DC pot {pot_index}"
+                )
                 entries.append(
                     (
                         drawdown_age,
-                        f"DC pot {pot_index} drawdown starts at age {drawdown_age}.",
+                        f"{pot_name} drawdown starts at age {drawdown_age}.",
                         colors_event[event_index % len(colors_event)],
                     )
                 )
@@ -190,7 +197,15 @@ def _collect_standard_event_entries(
         )
         event_index += 1
 
-    for pension in db_pensions:
+    for pension_index, pension in enumerate(db_pensions, start=1):
+        pension_name = (
+            db_pension_names[pension_index - 1]
+            if (
+                db_pension_names is not None
+                and pension_index - 1 < len(db_pension_names)
+            )
+            else f"DB income {pension_index}"
+        )
         if isinstance(pension, DbPension):
             db_start_age = pension.start_age
             db_amount = pension.annual_amount
@@ -201,7 +216,7 @@ def _collect_standard_event_entries(
             entries.append(
                 (
                     db_start_age,
-                    f"DB income starts at age {db_start_age}: "
+                    f"{pension_name} starts at age {db_start_age}: "
                     f"£{db_amount:,.0f}/year.",
                     colors_event[event_index % len(colors_event)],
                 )
@@ -215,25 +230,31 @@ def _collect_life_event_entries(
     life_events: Sequence[LifeEvent],
     start_age: int,
     end_age: int,
+    life_event_names: Sequence[str] | None = None,
 ) -> list[tuple[int, str, str]]:
     """Collect life events as (age, note, color)."""
     colors_event = ["#FF9F1C", "#E63946", "#F4A261", "#C1121F"]
     entries: list[tuple[int, str, str]] = []
 
     for event_index, event in enumerate(life_events):
+        event_name = (
+            life_event_names[event_index]
+            if life_event_names is not None and event_index < len(life_event_names)
+            else f"Life event {event_index + 1}"
+        )
         if isinstance(event, LumpSumEvent):
             age = event.age
-            note = f"Lump sum withdrawal at age {age}: £{event.amount:,.0f}."
+            note = f"{event_name} at age {age}: £{event.amount:,.0f}."
         elif event.end_age is None:
             age = event.start_age
             note = (
-                f"Spending step from age {event.start_age}: "
+                f"{event_name} from age {event.start_age}: "
                 f"+£{event.extra_per_year:,.0f}/year."
             )
         else:
             age = event.start_age
             note = (
-                f"Spending step age {event.start_age} to {event.end_age}: "
+                f"{event_name} age {event.start_age} to {event.end_age}: "
                 f"+£{event.extra_per_year:,.0f}/year."
             )
 
@@ -250,6 +271,9 @@ def _build_all_event_entries(
     start_age: int,
     end_age: int,
     dc_pots: Sequence[DcPotInput] | None = None,
+    dc_pot_names: Sequence[str] | None = None,
+    db_pension_names: Sequence[str] | None = None,
+    life_event_names: Sequence[str] | None = None,
 ) -> list[tuple[int, str, str]]:
     """Build the complete event list for annotation and notes."""
     entries = _collect_standard_event_entries(
@@ -258,12 +282,15 @@ def _build_all_event_entries(
         start_age=start_age,
         end_age=end_age,
         dc_pots=dc_pots,
+        dc_pot_names=dc_pot_names,
+        db_pension_names=db_pension_names,
     )
     entries.extend(
         _collect_life_event_entries(
             life_events=life_events,
             start_age=start_age,
             end_age=end_age,
+            life_event_names=life_event_names,
         )
     )
     return entries
@@ -285,6 +312,9 @@ def plot_pots_stacked_area(
     life_events: Sequence[LifeEvent] = (),
     spending_drawdown_schedule: np.ndarray | None = None,
     dc_pots: Sequence[DcPotInput] | None = None,
+    dc_pot_names: Sequence[str] | None = None,
+    db_pension_names: Sequence[str] | None = None,
+    life_event_names: Sequence[str] | None = None,
     save_output: bool = True,
     return_figure: bool = False,
     output_file: str | Path = "pots_stacked_area.png",
@@ -354,6 +384,9 @@ def plot_pots_stacked_area(
         start_age=start_age,
         end_age=end_age,
         dc_pots=dc_pots,
+        dc_pot_names=dc_pot_names,
+        db_pension_names=db_pension_names,
+        life_event_names=life_event_names,
     )
     notes = _draw_sorted_event_annotations(ax, event_entries, show_note_markers=True)
 
@@ -406,6 +439,9 @@ def plot_individual_pots_subplots(
     withdrawals_required: np.ndarray | None = None,
     life_events: Sequence[LifeEvent] = (),
     dc_pots: Sequence[DcPotInput] | None = None,
+    dc_pot_names: Sequence[str] | None = None,
+    db_pension_names: Sequence[str] | None = None,
+    life_event_names: Sequence[str] | None = None,
     save_output: bool = True,
     return_figure: bool = False,
     output_file: str | Path = "pots_individual.png",
@@ -528,6 +564,9 @@ def plot_individual_pots_subplots(
         start_age=start_age,
         end_age=end_age,
         dc_pots=dc_pots,
+        dc_pot_names=dc_pot_names,
+        db_pension_names=db_pension_names,
+        life_event_names=life_event_names,
     )
 
     all_axes = [axes[0, 0], axes[0, 1], axes[1, 0], axes[1, 1]]
@@ -568,6 +607,9 @@ def plot_sequence_of_returns_scenarios(
     life_events: Sequence[LifeEvent] = (),
     spending_drawdown_schedule: np.ndarray | None = None,
     dc_pots: Sequence[DcPotInput] | None = None,
+    dc_pot_names: Sequence[str] | None = None,
+    db_pension_names: Sequence[str] | None = None,
+    life_event_names: Sequence[str] | None = None,
     save_output: bool = True,
     return_figure: bool = False,
     output_file: str | Path = "sequence_scenarios.png",
@@ -677,6 +719,9 @@ def plot_sequence_of_returns_scenarios(
         start_age=start_age,
         end_age=end_age,
         dc_pots=dc_pots,
+        dc_pot_names=dc_pot_names,
+        db_pension_names=db_pension_names,
+        life_event_names=life_event_names,
     )
     notes = _draw_sorted_event_annotations(ax, event_entries, show_note_markers=True)
 
@@ -729,6 +774,9 @@ def plot_monte_carlo_fan_chart(
     life_events: Sequence[LifeEvent] = (),
     spending_drawdown_schedule: np.ndarray | None = None,
     dc_pots: Sequence[DcPotInput] | None = None,
+    dc_pot_names: Sequence[str] | None = None,
+    db_pension_names: Sequence[str] | None = None,
+    life_event_names: Sequence[str] | None = None,
     save_output: bool = True,
     return_figure: bool = False,
     output_file: str | Path = "monte_carlo_fan.png",
@@ -790,6 +838,9 @@ def plot_monte_carlo_fan_chart(
         start_age=start_age,
         end_age=end_age,
         dc_pots=dc_pots,
+        dc_pot_names=dc_pot_names,
+        db_pension_names=db_pension_names,
+        life_event_names=life_event_names,
     )
     notes = _draw_sorted_event_annotations(ax, event_entries, show_note_markers=True)
 
@@ -843,6 +894,8 @@ def plot_multiple_drawdown_levels(
     annual_drawdowns: Sequence[float],
     seed: int,
     dc_pots: Sequence[DcPotInput] | None = None,
+    dc_pot_names: Sequence[str] | None = None,
+    db_pension_names: Sequence[str] | None = None,
     output_file: str | Path = "multiple_drawdowns.png",
 ) -> None:
     """Plot outcomes for multiple fixed drawdown levels on one return path."""
@@ -910,6 +963,8 @@ def plot_multiple_drawdown_levels(
         start_age=start_age,
         end_age=end_age,
         dc_pots=dc_pots,
+        dc_pot_names=dc_pot_names,
+        db_pension_names=db_pension_names,
     )
     notes = _draw_sorted_event_annotations(ax, event_entries, show_note_markers=True)
 
@@ -943,6 +998,9 @@ def plot_baseline_vs_scenario_balances(
     db_pensions: Sequence[DbPensionInput] = (),
     life_events: Sequence[LifeEvent] = (),
     dc_pots: Sequence[DcPotInput] | None = None,
+    dc_pot_names: Sequence[str] | None = None,
+    db_pension_names: Sequence[str] | None = None,
+    life_event_names: Sequence[str] | None = None,
     save_output: bool = True,
     return_figure: bool = False,
     output_file: str | Path = "baseline_vs_scenario.png",
@@ -998,6 +1056,9 @@ def plot_baseline_vs_scenario_balances(
             start_age=int(ages[0]),
             end_age=int(ages[-1]),
             dc_pots=dc_pots,
+            dc_pot_names=dc_pot_names,
+            db_pension_names=db_pension_names,
+            life_event_names=life_event_names,
         )
         notes = _draw_sorted_event_annotations(
             ax,
