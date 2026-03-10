@@ -29,7 +29,7 @@ from ifa.engine import (
     run_monte_carlo_simulation,
     simulate_multi_pot_pension_path,
 )
-from ifa.events import build_annual_spending_schedule, build_required_withdrawals
+from ifa.events import build_required_withdrawals, build_spending_drawdown_schedule
 from ifa.market import generate_random_returns
 from ifa.metrics import summarize_monte_carlo, summarize_path
 from ifa.models import LifeEvent, LumpSumEvent, SpendingStepEvent
@@ -54,7 +54,7 @@ SCENARIO_EVENTS: tuple[LifeEvent, ...] = (
 
 def _format_gbp(amount: float) -> str:
     """Format a currency amount for beginner-friendly logs."""
-    return f"GBP{amount:,.0f}"
+    return f"£{amount:,.0f}"
 
 
 def _build_db_income_by_age(ages: np.ndarray) -> np.ndarray:
@@ -83,15 +83,17 @@ def _build_required_withdrawals_for_events(
     )
 
 
-def _build_annual_spending_schedule_for_events(
+def _build_spending_drawdown_schedule_for_events(
     baseline_spending: float,
     events: Sequence[LifeEvent],
 ) -> np.ndarray:
-    """Build annual spending schedule for chart secondary axes."""
+    """Build net spending drawdown schedule for chart secondary axes."""
     ages = np.arange(START_AGE, END_AGE + 1, dtype=np.int_)
-    return build_annual_spending_schedule(
+    db_income = _build_db_income_by_age(ages)
+    return build_spending_drawdown_schedule(
         ages=ages,
         baseline_spending=baseline_spending,
+        db_income=db_income,
         events=events,
     )
 
@@ -163,6 +165,16 @@ def run_life_events_comparison(
         ages=comparison_ages,
         baseline_balances=baseline_balances,
         scenario_balances=scenario_balances,
+        spending_drawdown_schedule=_build_spending_drawdown_schedule_for_events(
+            baseline_spending=baseline_spending,
+            events=scenario_events,
+        ),
+        secondary_dc_drawdown_age=(
+            int(DC_POTS[1][0]) if len(DC_POTS) > 1 else END_AGE
+        ),
+        db_pensions=DB_PENSIONS,
+        life_events=scenario_events,
+        dc_pots=DC_POTS,
         output_file=output_dir / "baseline_vs_scenario.png",
     )
 
@@ -193,12 +205,12 @@ def run_life_events_comparison(
                 event.end_age,
             )
     LOGGER.info(
-        "Baseline ending balance: GBP%.0f | Scenario ending balance: GBP%.0f",
+        "Baseline ending balance: £%.0f | Scenario ending balance: £%.0f",
         baseline_metrics.ending_balance,
         scenario_metrics.ending_balance,
     )
     LOGGER.info(
-        "Baseline min balance: GBP%.0f | Scenario min balance: GBP%.0f",
+        "Baseline min balance: £%.0f | Scenario min balance: £%.0f",
         baseline_metrics.min_balance,
         scenario_metrics.min_balance,
     )
@@ -243,7 +255,7 @@ def main() -> None:
         baseline_spending=BASELINE_SPENDING,
         events=SCENARIO_EVENTS,
     )
-    scenario_annual_spending = _build_annual_spending_schedule_for_events(
+    scenario_spending_drawdown = _build_spending_drawdown_schedule_for_events(
         baseline_spending=BASELINE_SPENDING,
         events=SCENARIO_EVENTS,
     )
@@ -260,7 +272,7 @@ def main() -> None:
         strategy,
         withdrawals_required=scenario_required,
         life_events=SCENARIO_EVENTS,
-        annual_spending_schedule=scenario_annual_spending,
+        spending_drawdown_schedule=scenario_spending_drawdown,
         dc_pots=DC_POTS,
         output_file=output_dir / "sequence_scenarios.png",
     )
@@ -282,7 +294,7 @@ def main() -> None:
         RANDOM_SEED,
         withdrawals_required=scenario_required,
         life_events=SCENARIO_EVENTS,
-        annual_spending_schedule=scenario_annual_spending,
+        spending_drawdown_schedule=scenario_spending_drawdown,
         dc_pots=DC_POTS,
         output_file=output_dir / "monte_carlo_fan.png",
     )
@@ -306,7 +318,7 @@ def main() -> None:
     mc_metrics = summarize_monte_carlo(monte_carlo_paths)
     LOGGER.info(
         "Monte Carlo learning summary: ruin probability %.1f%%, median ending "
-        "balance GBP%.0f, p10 GBP%.0f, p90 GBP%.0f.",
+        "balance £%.0f, p10 £%.0f, p90 £%.0f.",
         mc_metrics.ruin_probability * 100,
         mc_metrics.median_ending_balance,
         mc_metrics.p10_ending_balance,
@@ -347,7 +359,7 @@ def main() -> None:
         RANDOM_SEED,
         withdrawals_required=scenario_required,
         life_events=SCENARIO_EVENTS,
-        annual_spending_schedule=scenario_annual_spending,
+        spending_drawdown_schedule=scenario_spending_drawdown,
         dc_pots=DC_POTS,
         output_file=output_dir / "pots_stacked_area.png",
     )

@@ -83,8 +83,8 @@ pots and start ages.
 - Monte Carlo fan chart with ruin probability.
 - Pot composition charts (stacked and per-pot subplots), with a short guide
   before the charts to explain what each view does.
-- The first four charts include a secondary axis for annual spending
-  (baseline plus spending-step changes).
+- The first four charts include a secondary axis for spending drawdown
+  (spending requirement minus DB income).
 - Plain-English explanation of scenario impact.
 - Numbered event markers with a right-side notes panel in age order, so charts
   stay cleaner and event details remain easy to read.

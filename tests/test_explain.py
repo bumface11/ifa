@@ -31,7 +31,7 @@ def test_explanation_mentions_event_types_and_risk_summary() -> None:
     assert "one-off cost" in text
     assert "ongoing extra cost" in text
     assert "22.0%" in text
-    assert "GBP600,000" in text
+    assert "£600,000" in text
 
 
 def test_explanation_handles_no_events() -> None:

@@ -150,3 +150,41 @@ def build_annual_spending_schedule(
         spending[mask] += event.extra_per_year
 
     return spending
+
+
+def build_spending_drawdown_schedule(
+    ages: NDArray[np.int_],
+    baseline_spending: float,
+    db_income: NDArray[np.float64],
+    events: Sequence[LifeEvent],
+) -> NDArray[np.float64]:
+    """Build annual drawdown need for spending after DB income.
+
+    This derives the annual spending requirement from baseline plus step events,
+    then subtracts DB income to estimate the drawdown needed from invested pots.
+    Lump-sum events are excluded so the overlay remains a yearly spending signal.
+
+    Args:
+        ages: Inclusive age sequence for the simulation horizon.
+        baseline_spending: Baseline annual spending in real terms.
+        db_income: Annual DB income values aligned with ``ages``.
+        events: Life events that may change yearly spending.
+
+    Returns:
+        Annual drawdown requirement by age, clamped at zero.
+
+    Raises:
+        ValueError: If array lengths differ or ages are empty.
+    """
+    if db_income.shape[0] != ages.shape[0]:
+        raise ValueError(
+            "db_income length must match ages length; "
+            f"got {db_income.shape[0]} and {ages.shape[0]}"
+        )
+
+    spending_schedule = build_annual_spending_schedule(
+        ages=ages,
+        baseline_spending=baseline_spending,
+        events=events,
+    )
+    return np.maximum(0.0, spending_schedule - db_income)

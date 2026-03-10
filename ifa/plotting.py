@@ -1,4 +1,4 @@
-"""Plot creation functions for pension simulation outputs."""
+﻿"""Plot creation functions for pension simulation outputs."""
 
 from __future__ import annotations
 
@@ -113,34 +113,39 @@ def _draw_sorted_event_annotations(
 def _add_spending_axis(
     ax: plt.Axes,
     ages: np.ndarray,
-    annual_spending_schedule: np.ndarray,
+    spending_drawdown_schedule: np.ndarray,
 ) -> plt.Axes:
-    """Add a secondary axis showing annual spending schedule."""
-    if annual_spending_schedule.shape[0] != ages.shape[0]:
+    """Add a secondary axis showing spending drawdown requirement."""
+    if spending_drawdown_schedule.shape[0] != ages.shape[0]:
         raise ValueError(
-            "annual_spending_schedule length must match ages length; "
-            f"got {annual_spending_schedule.shape[0]} and {ages.shape[0]}"
+            "spending_drawdown_schedule length must match ages length; "
+            f"got {spending_drawdown_schedule.shape[0]} and {ages.shape[0]}"
         )
 
     axis_secondary = ax.twinx()
-    axis_secondary.step(
+    max_spending = float(np.max(spending_drawdown_schedule))
+    upper_bound = max(max_spending * 1.3, 1.0)
+
+    axis_secondary.fill_between(
         ages,
-        annual_spending_schedule,
-        where="post",
-        linewidth=2,
-        color="#B45309",
-        linestyle="-.",
-        label="Annual spending",
+        0.0,
+        spending_drawdown_schedule,
+        step="post",
+        color="#6B7280",
+        alpha=0.22,
+        linewidth=0,
+        label="Spending drawdown",
     )
+    axis_secondary.set_ylim(0.0, upper_bound)
     axis_secondary.set_ylabel(
-        "Annual Spending (GBP)",
+        "Spending Drawdown (£)",
         fontsize=11,
         fontweight="bold",
-        color="#B45309",
+        color="#4B5563",
     )
-    axis_secondary.tick_params(axis="y", labelcolor="#B45309", labelsize=11)
+    axis_secondary.tick_params(axis="y", labelcolor="#4B5563", labelsize=11)
     axis_secondary.yaxis.set_major_formatter(
-        plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
+        plt.FuncFormatter(lambda value, _: f"£{value / 1000:.0f}k")
     )
     return axis_secondary
 
@@ -197,7 +202,7 @@ def _collect_standard_event_entries(
                 (
                     db_start_age,
                     f"DB income starts at age {db_start_age}: "
-                    f"GBP{db_amount:,.0f}/year.",
+                    f"£{db_amount:,.0f}/year.",
                     colors_event[event_index % len(colors_event)],
                 )
             )
@@ -218,18 +223,18 @@ def _collect_life_event_entries(
     for event_index, event in enumerate(life_events):
         if isinstance(event, LumpSumEvent):
             age = event.age
-            note = f"Lump sum withdrawal at age {age}: GBP{event.amount:,.0f}."
+            note = f"Lump sum withdrawal at age {age}: £{event.amount:,.0f}."
         elif event.end_age is None:
             age = event.start_age
             note = (
                 f"Spending step from age {event.start_age}: "
-                f"+GBP{event.extra_per_year:,.0f}/year."
+                f"+£{event.extra_per_year:,.0f}/year."
             )
         else:
             age = event.start_age
             note = (
                 f"Spending step age {event.start_age} to {event.end_age}: "
-                f"+GBP{event.extra_per_year:,.0f}/year."
+                f"+£{event.extra_per_year:,.0f}/year."
             )
 
         if start_age <= age <= end_age:
@@ -278,7 +283,7 @@ def plot_pots_stacked_area(
     seed: int,
     withdrawals_required: np.ndarray | None = None,
     life_events: Sequence[LifeEvent] = (),
-    annual_spending_schedule: np.ndarray | None = None,
+    spending_drawdown_schedule: np.ndarray | None = None,
     dc_pots: Sequence[DcPotInput] | None = None,
     save_output: bool = True,
     return_figure: bool = False,
@@ -354,7 +359,7 @@ def plot_pots_stacked_area(
 
     ax.axhline(y=0, color="red", linestyle=":", linewidth=1.5, alpha=0.5)
     ax.set_xlabel("Age", fontsize=12, fontweight="bold")
-    ax.set_ylabel("Pot Balance (GBP)", fontsize=12, fontweight="bold")
+    ax.set_ylabel("Pot Balance (£)", fontsize=12, fontweight="bold")
     title_suffix = "Life events active" if len(life_events) > 0 else "No life events"
     ax.set_title(
         "Pension Pot Composition Over Time\n"
@@ -365,12 +370,12 @@ def plot_pots_stacked_area(
     ax.legend(fontsize=11, loc="upper right", framealpha=0.95)
     ax.grid(True, alpha=0.3)
     ax.yaxis.set_major_formatter(
-        plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
+        plt.FuncFormatter(lambda value, _: f"£{value / 1000:.0f}k")
     )
     _apply_numeric_text_scale(ax)
 
-    if annual_spending_schedule is not None:
-        axis_secondary = _add_spending_axis(ax, ages, annual_spending_schedule)
+    if spending_drawdown_schedule is not None:
+        axis_secondary = _add_spending_axis(ax, ages, spending_drawdown_schedule)
         lines1, labels1 = ax.get_legend_handles_labels()
         lines2, labels2 = axis_secondary.get_legend_handles_labels()
         ax.legend(lines1 + lines2, labels1 + labels2, fontsize=10, loc="upper right")
@@ -441,10 +446,10 @@ def plot_individual_pots_subplots(
     ax.set_title(
         "Tax-Free Pot (ISAs, Premium Bonds, etc.)", fontsize=12, fontweight="bold"
     )
-    ax.set_ylabel("Balance (GBP)", fontsize=11, fontweight="bold")
+    ax.set_ylabel("Balance (£)", fontsize=11, fontweight="bold")
     ax.grid(True, alpha=0.3)
     ax.yaxis.set_major_formatter(
-        plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
+        plt.FuncFormatter(lambda value, _: f"£{value / 1000:.0f}k")
     )
     _apply_numeric_text_scale(ax)
 
@@ -452,10 +457,10 @@ def plot_individual_pots_subplots(
     ax.plot(ages, dc_balances, linewidth=3, color="#3498DB", marker="s", markersize=4)
     ax.fill_between(ages, 0, dc_balances, alpha=0.3, color="#3498DB")
     ax.set_title("Main DC Pot (Drawing from age 55)", fontsize=12, fontweight="bold")
-    ax.set_ylabel("Balance (GBP)", fontsize=11, fontweight="bold")
+    ax.set_ylabel("Balance (£)", fontsize=11, fontweight="bold")
     ax.grid(True, alpha=0.3)
     ax.yaxis.set_major_formatter(
-        plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
+        plt.FuncFormatter(lambda value, _: f"£{value / 1000:.0f}k")
     )
     _apply_numeric_text_scale(ax)
 
@@ -471,10 +476,10 @@ def plot_individual_pots_subplots(
     ax.fill_between(ages, 0, secondary_dc_balances, alpha=0.3, color="#9B59B6")
     ax.set_title("Secondary DC Pot (Grows then Draws)", fontsize=12, fontweight="bold")
     ax.set_xlabel("Age", fontsize=11, fontweight="bold")
-    ax.set_ylabel("Balance (GBP)", fontsize=11, fontweight="bold")
+    ax.set_ylabel("Balance (£)", fontsize=11, fontweight="bold")
     ax.grid(True, alpha=0.3)
     ax.yaxis.set_major_formatter(
-        plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
+        plt.FuncFormatter(lambda value, _: f"£{value / 1000:.0f}k")
     )
     _apply_numeric_text_scale(ax)
 
@@ -501,11 +506,11 @@ def plot_individual_pots_subplots(
             where="post",
         )
         ax_secondary.set_ylabel(
-            "Annual DB Income (GBP)", fontsize=11, fontweight="bold", color="#E74C3C"
+            "Annual DB Income (£)", fontsize=11, fontweight="bold", color="#E74C3C"
         )
         ax_secondary.tick_params(axis="y", labelcolor="#E74C3C")
         ax_secondary.yaxis.set_major_formatter(
-            plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
+            plt.FuncFormatter(lambda value, _: f"£{value / 1000:.0f}k")
         )
         _apply_numeric_text_scale(ax_secondary)
 
@@ -519,10 +524,10 @@ def plot_individual_pots_subplots(
         "Total Pot + DB Pension Income Timeline", fontsize=12, fontweight="bold"
     )
     ax.set_xlabel("Age", fontsize=11, fontweight="bold")
-    ax.set_ylabel("Total Balance (GBP)", fontsize=11, fontweight="bold")
+    ax.set_ylabel("Total Balance (£)", fontsize=11, fontweight="bold")
     ax.grid(True, alpha=0.3)
     ax.yaxis.set_major_formatter(
-        plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
+        plt.FuncFormatter(lambda value, _: f"£{value / 1000:.0f}k")
     )
     _apply_numeric_text_scale(ax)
 
@@ -578,7 +583,7 @@ def plot_sequence_of_returns_scenarios(
     strategy_fn: DrawdownFn,
     withdrawals_required: np.ndarray | None = None,
     life_events: Sequence[LifeEvent] = (),
-    annual_spending_schedule: np.ndarray | None = None,
+    spending_drawdown_schedule: np.ndarray | None = None,
     dc_pots: Sequence[DcPotInput] | None = None,
     save_output: bool = True,
     return_figure: bool = False,
@@ -693,7 +698,7 @@ def plot_sequence_of_returns_scenarios(
     notes = _draw_sorted_event_annotations(ax, event_entries, show_note_markers=True)
 
     ax.set_xlabel("Age", fontsize=12, fontweight="bold")
-    ax.set_ylabel("Pension Balance (GBP)", fontsize=12, fontweight="bold")
+    ax.set_ylabel("Pension Balance (£)", fontsize=12, fontweight="bold")
     title_suffix = "Life events active" if len(life_events) > 0 else "No life events"
     ax.set_title(
         f"Pension Drawdown: Sequence-of-Returns Scenarios ({title_suffix})",
@@ -703,12 +708,12 @@ def plot_sequence_of_returns_scenarios(
     ax.legend(fontsize=10, loc="best")
     ax.grid(True, alpha=0.3)
     ax.yaxis.set_major_formatter(
-        plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
+        plt.FuncFormatter(lambda value, _: f"£{value / 1000:.0f}k")
     )
     _apply_numeric_text_scale(ax)
 
-    if annual_spending_schedule is not None:
-        axis_secondary = _add_spending_axis(ax, ages, annual_spending_schedule)
+    if spending_drawdown_schedule is not None:
+        axis_secondary = _add_spending_axis(ax, ages, spending_drawdown_schedule)
         lines1, labels1 = ax.get_legend_handles_labels()
         lines2, labels2 = axis_secondary.get_legend_handles_labels()
         ax.legend(lines1 + lines2, labels1 + labels2, fontsize=10, loc="best")
@@ -739,7 +744,7 @@ def plot_monte_carlo_fan_chart(
     seed: int,
     withdrawals_required: np.ndarray | None = None,
     life_events: Sequence[LifeEvent] = (),
-    annual_spending_schedule: np.ndarray | None = None,
+    spending_drawdown_schedule: np.ndarray | None = None,
     dc_pots: Sequence[DcPotInput] | None = None,
     save_output: bool = True,
     return_figure: bool = False,
@@ -806,7 +811,7 @@ def plot_monte_carlo_fan_chart(
     notes = _draw_sorted_event_annotations(ax, event_entries, show_note_markers=True)
 
     ax.set_xlabel("Age", fontsize=12, fontweight="bold")
-    ax.set_ylabel("Pension Balance (GBP)", fontsize=12, fontweight="bold")
+    ax.set_ylabel("Pension Balance (£)", fontsize=12, fontweight="bold")
     title_suffix = "Life events active" if len(life_events) > 0 else "No life events"
     title = (
         f"Monte Carlo Pension Projection ({num_simulations} simulations, "
@@ -820,12 +825,12 @@ def plot_monte_carlo_fan_chart(
     ax.legend(fontsize=10, loc="best")
     ax.grid(True, alpha=0.3)
     ax.yaxis.set_major_formatter(
-        plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
+        plt.FuncFormatter(lambda value, _: f"£{value / 1000:.0f}k")
     )
     _apply_numeric_text_scale(ax)
 
-    if annual_spending_schedule is not None:
-        axis_secondary = _add_spending_axis(ax, ages, annual_spending_schedule)
+    if spending_drawdown_schedule is not None:
+        axis_secondary = _add_spending_axis(ax, ages, spending_drawdown_schedule)
         lines1, labels1 = ax.get_legend_handles_labels()
         lines2, labels2 = axis_secondary.get_legend_handles_labels()
         ax.legend(lines1 + lines2, labels1 + labels2, fontsize=10, loc="best")
@@ -886,7 +891,7 @@ def plot_multiple_drawdown_levels(
             linewidth=2.5,
             marker="o",
             markersize=5,
-            label=f"GBP{drawdown:,.0f}/year",
+            label=f"£{drawdown:,.0f}/year",
             color=colors[index],
         )
 
@@ -926,7 +931,7 @@ def plot_multiple_drawdown_levels(
     notes = _draw_sorted_event_annotations(ax, event_entries, show_note_markers=True)
 
     ax.set_xlabel("Age", fontsize=12, fontweight="bold")
-    ax.set_ylabel("Pension Balance (GBP)", fontsize=12, fontweight="bold")
+    ax.set_ylabel("Pension Balance (£)", fontsize=12, fontweight="bold")
     ax.set_title(
         "Impact of Different Drawdown Levels\n(Same market return sequence)",
         fontsize=14,
@@ -935,7 +940,7 @@ def plot_multiple_drawdown_levels(
     ax.legend(fontsize=10, loc="best")
     ax.grid(True, alpha=0.3)
     ax.yaxis.set_major_formatter(
-        plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
+        plt.FuncFormatter(lambda value, _: f"£{value / 1000:.0f}k")
     )
     _apply_numeric_text_scale(ax)
 
@@ -950,7 +955,11 @@ def plot_baseline_vs_scenario_balances(
     ages: np.ndarray,
     baseline_balances: np.ndarray,
     scenario_balances: np.ndarray,
-    annual_spending_schedule: np.ndarray | None = None,
+    spending_drawdown_schedule: np.ndarray | None = None,
+    secondary_dc_drawdown_age: int | None = None,
+    db_pensions: Sequence[DbPensionInput] = (),
+    life_events: Sequence[LifeEvent] = (),
+    dc_pots: Sequence[DcPotInput] | None = None,
     save_output: bool = True,
     return_figure: bool = False,
     output_file: str | Path = "baseline_vs_scenario.png",
@@ -978,7 +987,7 @@ def plot_baseline_vs_scenario_balances(
 
     ax.axhline(y=0, color="black", linestyle=":", linewidth=1.3, alpha=0.6)
     ax.set_xlabel("Age", fontsize=12, fontweight="bold")
-    ax.set_ylabel("Total Balance (GBP)", fontsize=12, fontweight="bold")
+    ax.set_ylabel("Total Balance (£)", fontsize=12, fontweight="bold")
     ax.set_title(
         "Baseline vs Life-Event Scenario\n(Real-terms pension pot trajectory)",
         fontsize=14,
@@ -987,18 +996,34 @@ def plot_baseline_vs_scenario_balances(
     ax.grid(True, alpha=0.3)
     ax.legend(fontsize=10, loc="best")
     ax.yaxis.set_major_formatter(
-        plt.FuncFormatter(lambda value, _: f"GBP{value / 1000:.0f}k")
+        plt.FuncFormatter(lambda value, _: f"£{value / 1000:.0f}k")
     )
     _apply_numeric_text_scale(ax)
 
-    if annual_spending_schedule is not None:
-        axis_secondary = _add_spending_axis(ax, ages, annual_spending_schedule)
+    if spending_drawdown_schedule is not None:
+        axis_secondary = _add_spending_axis(ax, ages, spending_drawdown_schedule)
         lines1, labels1 = ax.get_legend_handles_labels()
         lines2, labels2 = axis_secondary.get_legend_handles_labels()
         ax.legend(lines1 + lines2, labels1 + labels2, fontsize=10, loc="best")
 
+    notes: list[str] = []
+    if len(ages) > 0 and (len(db_pensions) > 0 or len(life_events) > 0 or dc_pots):
+        event_entries = _build_all_event_entries(
+            secondary_dc_drawdown_age=secondary_dc_drawdown_age,
+            db_pensions=db_pensions,
+            life_events=life_events,
+            start_age=int(ages[0]),
+            end_age=int(ages[-1]),
+            dc_pots=dc_pots,
+        )
+        notes = _draw_sorted_event_annotations(
+            ax,
+            event_entries,
+            show_note_markers=True,
+        )
+
     target = _to_output_path(output_file)
-    fig.tight_layout()
+    _add_notes_box(fig, notes)
     if save_output:
         plt.savefig(target, dpi=150, bbox_inches="tight")
         LOGGER.info("Saved: %s", target)
@@ -1006,3 +1031,5 @@ def plot_baseline_vs_scenario_balances(
         return fig
     plt.close()
     return None
+
+

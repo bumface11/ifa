@@ -25,7 +25,7 @@ from ifa.engine import (
     run_monte_carlo_simulation,
     simulate_multi_pot_pension_path,
 )
-from ifa.events import build_annual_spending_schedule, build_required_withdrawals
+from ifa.events import build_required_withdrawals, build_spending_drawdown_schedule
 from ifa.explain import build_plain_english_explanation
 from ifa.metrics import summarize_monte_carlo, summarize_path
 from ifa.models import LifeEvent, LumpSumEvent, SpendingStepEvent
@@ -87,7 +87,7 @@ def _build_dc_pots(start_age: int, end_age: int) -> list[tuple[int, float]]:
         )
         initial_balance = float(
             st.number_input(
-                f"DC pot #{index + 1} initial balance GBP",
+                f"DC pot #{index + 1} initial balance £",
                 min_value=0.0,
                 value=default_balance,
                 step=1_000.0,
@@ -130,12 +130,12 @@ def _build_life_events(
         )
         lump_amount = float(
             st.number_input(
-                f"Amount GBP (lump #{index + 1})",
+                f"Amount £ (lump #{index + 1})",
                 min_value=0.0,
                 value=18_000.0,
                 step=1_000.0,
                 key=f"lump_amount_{index}",
-                help="Amount of this one-off extra cost in GBP.",
+                help="Amount of this one-off extra cost in £.",
             )
         )
         if lump_amount > 0.0:
@@ -164,12 +164,12 @@ def _build_life_events(
         )
         step_amount = float(
             st.number_input(
-                f"Extra per year GBP (step #{index + 1})",
+                f"Extra per year £ (step #{index + 1})",
                 min_value=0.0,
                 value=6_000.0,
                 step=500.0,
                 key=f"step_amount_{index}",
-                help="Extra spending per year in GBP for this step event.",
+                help="Extra spending per year in £ for this step event.",
             )
         )
         has_end = st.checkbox(
@@ -232,12 +232,12 @@ def _build_db_pensions(start_age: int, end_age: int) -> list[tuple[int, float]]:
         )
         stream_amount = float(
             st.number_input(
-                f"DB annual amount GBP #{index + 1}",
+                f"DB annual amount £ #{index + 1}",
                 min_value=0.0,
                 value=float(default_amount),
                 step=500.0,
                 key=f"db_amount_{index}",
-                help="Yearly income amount for this DB pension stream in GBP.",
+                help="Yearly income amount for this DB pension stream in £.",
             )
         )
         pensions.append((stream_age, stream_amount))
@@ -322,7 +322,7 @@ def main() -> None:
     st.sidebar.header("Core Inputs")
     start_age = int(
         st.sidebar.number_input(
-            "Start age", min_value=40, max_value=75, value=START_AGE
+            "Start age", min_value=40, max_value=85, value=START_AGE
         )
     )
     end_age = int(
@@ -333,7 +333,7 @@ def main() -> None:
 
     tax_free_pot = float(
         st.sidebar.number_input(
-            "Tax-free pot GBP",
+            "Tax-free pot £",
             min_value=0.0,
             value=float(INITIAL_TAX_FREE_POT),
             step=1_000.0,
@@ -342,7 +342,7 @@ def main() -> None:
 
     baseline_spending = float(
         st.sidebar.number_input(
-            "Baseline annual spending GBP",
+            "Baseline annual spending £",
             min_value=0.0,
             value=30_000.0,
             step=1_000.0,
@@ -447,9 +447,10 @@ def main() -> None:
         db_income=db_income,
         events=life_events,
     )
-    annual_spending_schedule = build_annual_spending_schedule(
+    spending_drawdown_schedule = build_spending_drawdown_schedule(
         ages=ages,
         baseline_spending=baseline_spending,
+        db_income=db_income,
         events=life_events,
     )
 
@@ -510,8 +511,8 @@ def main() -> None:
     monte_carlo_metrics = summarize_monte_carlo(monte_carlo_paths)
 
     col1, col2, col3 = st.columns(3)
-    col1.metric("Baseline ending", f"GBP{baseline_metrics.ending_balance:,.0f}")
-    col2.metric("Scenario ending", f"GBP{scenario_metrics.ending_balance:,.0f}")
+    col1.metric("Baseline ending", f"£{baseline_metrics.ending_balance:,.0f}")
+    col2.metric("Scenario ending", f"£{scenario_metrics.ending_balance:,.0f}")
     col3.metric(
         "Ruin probability", f"{monte_carlo_metrics.ruin_probability * 100:.1f}%"
     )
@@ -529,7 +530,11 @@ def main() -> None:
         ages=ages,
         baseline_balances=baseline_balances,
         scenario_balances=scenario_balances,
-        annual_spending_schedule=annual_spending_schedule,
+        spending_drawdown_schedule=spending_drawdown_schedule,
+        secondary_dc_drawdown_age=secondary_draw_age,
+        db_pensions=db_pensions,
+        life_events=life_events,
+        dc_pots=dc_pots,
         save_output=save_outputs,
         return_figure=True,
         output_file=output_dir / "baseline_vs_scenario_streamlit.png",
@@ -551,7 +556,7 @@ def main() -> None:
         strategy_fn=base_strategy,
         withdrawals_required=scenario_required,
         life_events=life_events,
-        annual_spending_schedule=annual_spending_schedule,
+        spending_drawdown_schedule=spending_drawdown_schedule,
         dc_pots=dc_pots,
         save_output=save_outputs,
         return_figure=True,
@@ -576,7 +581,7 @@ def main() -> None:
         seed=random_seed,
         withdrawals_required=scenario_required,
         life_events=life_events,
-        annual_spending_schedule=annual_spending_schedule,
+        spending_drawdown_schedule=spending_drawdown_schedule,
         dc_pots=dc_pots,
         save_output=save_outputs,
         return_figure=True,
@@ -608,7 +613,7 @@ def main() -> None:
         seed=random_seed,
         withdrawals_required=scenario_required,
         life_events=life_events,
-        annual_spending_schedule=annual_spending_schedule,
+        spending_drawdown_schedule=spending_drawdown_schedule,
         dc_pots=dc_pots,
         save_output=save_outputs,
         return_figure=True,

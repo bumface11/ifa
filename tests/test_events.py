@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from ifa.events import build_required_withdrawals
+from ifa.events import build_required_withdrawals, build_spending_drawdown_schedule
 from ifa.models import LumpSumEvent, SpendingStepEvent
 
 
@@ -68,3 +68,19 @@ def test_invalid_event_age_raises_value_error() -> None:
             db_income=db_income,
             events=(LumpSumEvent(age=75, amount=5_000.0),),
         )
+
+
+def test_spending_drawdown_schedule_offsets_db_income() -> None:
+    """Spending drawdown schedule should be spending minus DB income."""
+    ages = np.arange(60, 65, dtype=np.int_)
+    db_income = np.array([12_000.0, 12_000.0, 20_000.0, 25_000.0, 30_000.0])
+
+    result = build_spending_drawdown_schedule(
+        ages=ages,
+        baseline_spending=20_000.0,
+        db_income=db_income,
+        events=(SpendingStepEvent(start_age=62, extra_per_year=3_000.0),),
+    )
+
+    expected = np.array([8_000.0, 8_000.0, 3_000.0, 0.0, 0.0])
+    assert np.allclose(result, expected)

@@ -29,17 +29,17 @@ def build_plain_english_explanation(
     for event in events:
         if isinstance(event, LumpSumEvent):
             event_parts.append(
-                f"a one-off cost of GBP{event.amount:,.0f} at age {event.age}"
+                f"a one-off cost of £{event.amount:,.0f} at age {event.age}"
             )
         elif event.end_age is None:
             event_parts.append(
                 "an ongoing extra cost of "
-                f"GBP{event.extra_per_year:,.0f}/year from age {event.start_age}"
+                f"£{event.extra_per_year:,.0f}/year from age {event.start_age}"
             )
         else:
             event_parts.append(
                 "an ongoing extra cost of "
-                f"GBP{event.extra_per_year:,.0f}/year from age {event.start_age} "
+                f"£{event.extra_per_year:,.0f}/year from age {event.start_age} "
                 f"to {event.end_age}"
             )
 
@@ -57,11 +57,11 @@ def build_plain_english_explanation(
 
     return (
         f"{event_summary}. In this deterministic run, your ending balance is "
-        f"GBP{scenario_metrics.ending_balance:,.0f}, which is {direction} than "
-        f"baseline by GBP{abs(deterministic_delta):,.0f}. "
+        f"£{scenario_metrics.ending_balance:,.0f}, which is {direction} than "
+        f"baseline by £{abs(deterministic_delta):,.0f}. "
         f"Across many market paths, the estimated chance of running out is "
         f"{monte_carlo_metrics.ruin_probability * 100:.1f}%, and the median ending "
-        f"balance is GBP{monte_carlo_metrics.median_ending_balance:,.0f}. "
+        f"balance is £{monte_carlo_metrics.median_ending_balance:,.0f}. "
         "This happens because larger spending needs mean more money is withdrawn "
         "earlier, leaving less invested for later growth."
     )
