@@ -15,6 +15,13 @@ _PRESET_VERSION = 1
 UTC_TZ = getattr(datetime, "UTC", timezone.utc)  # noqa: UP017
 
 
+def _write_payload_atomic(target_path: Path, payload: dict[str, object]) -> None:
+    """Write preset payload atomically to avoid partial-file corruption."""
+    temp_path = target_path.with_suffix(f"{target_path.suffix}.tmp")
+    temp_path.write_bytes(orjson.dumps(payload, option=orjson.OPT_INDENT_2))
+    temp_path.replace(target_path)
+
+
 def build_default_preset_name(now: datetime | None = None) -> str:
     """Build a friendly default preset name.
 
@@ -86,7 +93,7 @@ def save_preset(
         "saved_at": datetime.now(UTC_TZ).isoformat(),
         "sidebar_state": sidebar_state,
     }
-    target_path.write_bytes(orjson.dumps(payload, option=orjson.OPT_INDENT_2))
+    _write_payload_atomic(target_path, payload)
     return target_path
 
 
@@ -124,6 +131,24 @@ def load_preset(preset_path: Path) -> tuple[str, JsonMap]:
     return name, normalized_state
 
 
+def get_preset_saved_at(preset_path: Path) -> str | None:
+    """Return ISO saved timestamp from preset payload, if present."""
+    try:
+        payload = orjson.loads(preset_path.read_bytes())
+    except OSError:
+        return None
+    except orjson.JSONDecodeError:
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+
+    saved_at = payload.get("saved_at")
+    if isinstance(saved_at, str):
+        return saved_at
+    return None
+
+
 def rename_preset(preset_path: Path, new_name: str) -> Path:
     """Rename a preset file and update its display name in the payload.
 
@@ -141,3 +166,9 @@ def rename_preset(preset_path: Path, new_name: str) -> Path:
         preset_path.rename(new_path)
     save_preset(new_path.parent, new_name, state)
     return new_path
+
+
+def delete_preset(preset_path: Path) -> None:
+    """Delete a preset file if it exists."""
+    if preset_path.exists():
+        preset_path.unlink()

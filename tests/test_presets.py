@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ifa.presets import (
     build_default_preset_name,
+    get_preset_saved_at,
     list_preset_files,
     load_preset,
     rename_preset,
@@ -55,3 +56,11 @@ def test_list_and_rename_presets(tmp_path: Path) -> None:
 def test_default_preset_name_has_prefix() -> None:
     """Default generated names should start with the expected prefix."""
     assert build_default_preset_name().startswith("Preset ")
+
+
+def test_get_preset_saved_at_returns_iso_string(tmp_path: Path) -> None:
+    """Saved preset payload should include a readable saved-at timestamp."""
+    target = save_preset(tmp_path, "Timestamp Preset", {"start_age_input": 55})
+    saved_at = get_preset_saved_at(target)
+    assert isinstance(saved_at, str)
+    assert len(saved_at) > 0
