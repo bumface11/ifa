@@ -99,8 +99,13 @@ pots and start ages.
   scrolling in the control panel.
 - Collapsible `DC Pot Inputs` section supporting multiple DC pots with per-pot
   drawdown start ages.
-- Sidebar parameter presets that can be saved locally, loaded from a list, and
-  renamed after creation.
+- Sidebar parameter presets with streamlined controls: `New`, `Save`,
+  `Save As`, and `Delete`.
+- Selecting a preset from the list loads it automatically.
+- If you switch presets with unsaved changes, the app prompts before loading
+  the new selection.
+- Editing `Preset name` and then clicking `Save` updates the selected preset
+  and renames it in one step.
 - Editable name fields for each DC pot and each life event, with sensible
   default names.
 - Editable name fields for each DB pension stream, with sensible defaults.

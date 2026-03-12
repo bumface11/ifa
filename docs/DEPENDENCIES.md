@@ -66,3 +66,6 @@ graph LR
 - CLI and Streamlit both reuse the same engine, events, and plotting modules.
 - Both frontends now pass multi-DC-pot inputs into `ifa.engine` using per-pot
     drawdown start ages.
+- Preset file persistence is isolated in `ifa.presets`; preset UI behavior
+    (button actions, auto-load on selection, unsaved-change prompts) is handled
+    in `ifa_web.py`.
