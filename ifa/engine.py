@@ -168,12 +168,9 @@ def simulate_multi_pot_pension_path(
                 dc_balance_matrix[pot_index, index] = 0.0
                 continue
 
-            if current_age < int(drawdown_start_ages[pot_index]):
-                dc_balance_matrix[pot_index, index] = (
-                    prior_balance * (1.0 + annual_return)
-                )
-            else:
-                dc_balance_matrix[pot_index, index] = prior_balance
+            # DC pots continue compounding while positive, even after drawdown
+            # eligibility begins.
+            dc_balance_matrix[pot_index, index] = prior_balance * (1.0 + annual_return)
 
         db_income = calculate_db_pension_income(current_age, db_pensions)
         db_income_array[index] = db_income

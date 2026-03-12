@@ -196,3 +196,32 @@ def test_lump_sum_event_reduces_balances_vs_baseline_on_same_returns() -> None:
 
     # Assert
     assert scenario_total[-1] < baseline_total[-1]
+
+
+def test_dc_pot_keeps_growing_after_drawdown_start_when_not_withdrawn() -> None:
+    """DC pot should compound after drawdown age if no withdrawals are needed."""
+    start_age = 60
+    end_age = 62
+    returns = np.full(end_age - start_age, 0.10, dtype=np.float64)
+
+    (
+        _ages,
+        _total_balances,
+        dc_balances,
+        _secondary_dc_balances,
+        _tax_free_balances,
+        _db_income,
+        _withdrawals,
+    ) = simulate_multi_pot_pension_path(
+        tax_free_pot=0.0,
+        dc_pot=100.0,
+        secondary_dc_pot=0.0,
+        secondary_dc_drawdown_age=60,
+        db_pensions=[],
+        start_age=start_age,
+        end_age=end_age,
+        returns=returns,
+        drawdown_fn=create_fixed_real_drawdown_strategy(0.0),
+    )
+
+    assert np.allclose(dc_balances, np.array([100.0, 110.0, 121.0]))

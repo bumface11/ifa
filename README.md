@@ -72,6 +72,8 @@ The simulator now supports multiple DC pots, each with its own drawdown start ag
 - Primary DC pot drawdown start defaults to age `57`.
 - Additional DC pots can start later (for example age `65`).
 - Both CLI and Streamlit use the same per-pot drawdown rules.
+- DC pots continue to compound with market returns while they remain above zero,
+  including after drawdown eligibility starts.
 
 In Streamlit, open `DC Pot Inputs` in the sidebar to add or edit multiple DC
 pots and start ages.
