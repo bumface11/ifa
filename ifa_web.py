@@ -43,7 +43,7 @@ from ifa.presets import (
     get_preset_saved_at,
     list_preset_files,
     load_preset,
-    rename_preset,
+    sanitize_preset_filename,
     save_preset,
 )
 from ifa.strategies import create_fixed_real_drawdown_strategy
@@ -94,6 +94,11 @@ def _apply_pending_sidebar_updates() -> None:
     loaded_state = st.session_state.pop("_loaded_sidebar_state", None)
     if isinstance(loaded_state, dict):
         _apply_sidebar_state(loaded_state)
+        # Record what we loaded so unsaved-changes detection works.
+        pending_sel = st.session_state.get("_pending_preset_selected")
+        if isinstance(pending_sel, str):
+            st.session_state["_last_loaded_preset_name"] = pending_sel
+        st.session_state["_last_loaded_preset_state"] = loaded_state
 
     pending_selected = st.session_state.pop("_pending_preset_selected", None)
     if isinstance(pending_selected, str):
@@ -111,73 +116,73 @@ def _execute_preset_action(
     preset_map: dict[str, Path],
     preset_dir: Path,
 ) -> None:
-    """Execute one requested preset action after all sidebar widgets are built."""
+    """Execute one requested preset action after all sidebar widgets are built.
+
+    Actions:
+        new: Generate a fresh default name and deselect the current preset.
+        save: Update the selected preset (rename file if name changed); falls
+            back to creating a new preset when nothing is selected.
+        save_as: Always create a new preset file with the current name.
+        delete: Remove the selected preset file.
+        load: Load the selected preset (used by auto-load and discard-confirm).
+    """
     preset_name = str(st.session_state.get("preset_name_input", "")).strip()
 
-    if action == "load":
-        if selected_preset == "(none)":
-            st.session_state["_preset_notice"] = "Choose a preset before loading."
-            return
-
-        loaded_name, loaded_state = load_preset(preset_map[selected_preset])
-        st.session_state["_loaded_sidebar_state"] = loaded_state
-        st.session_state["_pending_preset_name"] = loaded_name
-        st.session_state["_pending_preset_selected"] = selected_preset
-        st.session_state["_preset_notice"] = f"Loaded preset: {selected_preset}"
+    if action == "new":
+        st.session_state["_pending_preset_name"] = build_default_preset_name()
+        st.session_state["_pending_preset_selected"] = "(none)"
         st.rerun()
 
-    if action == "save_new":
-        saved_path = save_preset(
-            preset_dir=preset_dir,
-            preset_name=preset_name or build_default_preset_name(),
-            sidebar_state=_collect_sidebar_state(),
-        )
+    if action == "save":
+        current_state = _collect_sidebar_state()
+        if selected_preset != "(none)":
+            save_name = preset_name or selected_preset
+            old_stem = selected_preset
+            new_stem = sanitize_preset_filename(save_name)
+            saved_path = save_preset(preset_dir, save_name, current_state)
+            if old_stem != new_stem and old_stem in preset_map:
+                delete_preset(preset_map[old_stem])
+        else:
+            save_name = preset_name or build_default_preset_name()
+            saved_path = save_preset(preset_dir, save_name, current_state)
+        st.session_state["_last_loaded_preset_name"] = saved_path.stem
+        st.session_state["_last_loaded_preset_state"] = current_state
         st.session_state["_pending_preset_selected"] = saved_path.stem
-        st.session_state["_pending_preset_name"] = preset_name or saved_path.stem
-        st.session_state["_preset_notice"] = f"Saved preset: {saved_path.stem}"
+        st.session_state["_pending_preset_name"] = save_name
+        st.session_state["_preset_notice"] = f"Saved: {save_name}"
         st.rerun()
 
-    if action == "save_selected":
-        if selected_preset == "(none)":
-            st.session_state["_preset_notice"] = "Choose a preset before updating."
-            return
-
-        save_preset(
-            preset_dir=preset_dir,
-            preset_name=selected_preset,
-            sidebar_state=_collect_sidebar_state(),
-        )
-        st.session_state["_pending_preset_selected"] = selected_preset
-        st.session_state["_pending_preset_name"] = selected_preset
-        st.session_state["_preset_notice"] = f"Updated preset: {selected_preset}"
-        st.rerun()
-
-    if action == "rename":
-        if selected_preset == "(none)":
-            st.session_state["_preset_notice"] = "Choose a preset before renaming."
-            return
-        if len(preset_name) == 0:
-            st.session_state["_preset_notice"] = "Enter a name before renaming."
-            return
-
-        renamed_path = rename_preset(
-            preset_path=preset_map[selected_preset],
-            new_name=preset_name,
-        )
-        st.session_state["_pending_preset_name"] = preset_name
-        st.session_state["_pending_preset_selected"] = renamed_path.stem
-        st.session_state["_preset_notice"] = f"Renamed preset to: {renamed_path.stem}"
+    if action == "save_as":
+        current_state = _collect_sidebar_state()
+        name = preset_name or build_default_preset_name()
+        saved_path = save_preset(preset_dir, name, current_state)
+        st.session_state["_last_loaded_preset_name"] = saved_path.stem
+        st.session_state["_last_loaded_preset_state"] = current_state
+        st.session_state["_pending_preset_selected"] = saved_path.stem
+        st.session_state["_pending_preset_name"] = name
+        st.session_state["_preset_notice"] = f"Saved copy: {name}"
         st.rerun()
 
     if action == "delete":
         if selected_preset == "(none)":
             st.session_state["_preset_notice"] = "Choose a preset before deleting."
             return
-
         delete_preset(preset_map[selected_preset])
+        st.session_state.pop("_last_loaded_preset_name", None)
+        st.session_state.pop("_last_loaded_preset_state", None)
         st.session_state["_pending_preset_selected"] = "(none)"
         st.session_state["_pending_preset_name"] = build_default_preset_name()
-        st.session_state["_preset_notice"] = f"Deleted preset: {selected_preset}"
+        st.session_state["_preset_notice"] = f"Deleted: {selected_preset}"
+        st.rerun()
+
+    if action == "load":
+        if selected_preset == "(none)":
+            return
+        loaded_name, loaded_state = load_preset(preset_map[selected_preset])
+        st.session_state["_loaded_sidebar_state"] = loaded_state
+        st.session_state["_pending_preset_name"] = loaded_name
+        st.session_state["_pending_preset_selected"] = selected_preset
+        st.session_state["_preset_notice"] = f"Loaded: {selected_preset}"
         st.rerun()
 
 
@@ -247,6 +252,29 @@ def _format_saved_at_label(saved_at_iso: str | None) -> str:
         return "Last saved: unknown"
 
     return "Last saved: " + timestamp.astimezone().strftime("%Y-%m-%d %H:%M")
+
+
+def _has_unsaved_changes() -> bool:
+    """Return True if the current sidebar state differs from the last loaded preset.
+
+    Returns:
+        True when a preset has been loaded and at least one tracked parameter
+        has since changed; False otherwise.
+    """
+    last_name = st.session_state.get("_last_loaded_preset_name")
+    if not last_name or last_name == "(none)":
+        return False
+    last_state = st.session_state.get("_last_loaded_preset_state")
+    if not isinstance(last_state, dict) or not last_state:
+        return False
+    return _collect_sidebar_state() != last_state
+
+
+def _on_preset_selectbox_change() -> None:
+    """Stage an auto-load when the user selects a different preset."""
+    new_sel = st.session_state.get("preset_selected", "(none)")
+    if new_sel != "(none)":
+        st.session_state["_pending_preset_auto_load"] = new_sel
 
 
 def _build_db_income(
@@ -588,7 +616,7 @@ def main() -> None:
     with st.sidebar.container():
         notice = st.session_state.pop("_preset_notice", None)
         if isinstance(notice, str) and len(notice) > 0:
-            if notice.startswith("Choose") or notice.startswith("Enter"):
+            if notice.startswith("Choose"):
                 st.warning(notice)
             else:
                 st.success(notice)
@@ -597,37 +625,58 @@ def main() -> None:
             "Preset name",
             key="preset_name_input",
             help=(
-                "A default name is provided automatically. You can override it "
-                "when saving or change it later by renaming a saved preset."
+                "Name for this preset. Edit the name then click Save to update "
+                "and rename the selected preset in one step."
             ),
         )
         selected_preset = st.selectbox(
-            "Locally saved parameter sets",
+            "Saved presets",
             options=preset_options,
             key="preset_selected",
+            on_change=_on_preset_selectbox_change,
+            help="Selecting a preset loads it automatically.",
         )
         if selected_preset != "(none)":
             selected_saved_at = get_preset_saved_at(preset_map[selected_preset])
             st.caption(_format_saved_at_label(selected_saved_at))
 
-        save_column, load_column = st.columns(2)
-        with save_column:
-            if st.button("Save as new", key="save_params_button"):
-                st.session_state["_pending_preset_action"] = "save_new"
+        discard_for = st.session_state.get("_show_discard_warning_for")
+        if isinstance(discard_for, str):
+            st.warning(f"Unsaved changes — load \"{discard_for}\"?")
+            d_col1, d_col2 = st.columns(2)
+            with d_col1:
+                if st.button("Load anyway", key="preset_discard_ok",
+                             use_container_width=True):
+                    st.session_state.pop("_show_discard_warning_for", None)
+                    st.session_state["_pending_preset_action"] = "load"
+            with d_col2:
+                if st.button("Cancel", key="preset_discard_cancel",
+                             use_container_width=True):
+                    st.session_state.pop("_show_discard_warning_for", None)
+                    last = st.session_state.get("_last_loaded_preset_name") or "(none)"
+                    st.session_state["_pending_preset_selected"] = (
+                        last if last in preset_map else "(none)"
+                    )
+                    st.rerun()
 
-        with load_column:
-            if st.button("Load selected", key="load_params_button"):
-                st.session_state["_pending_preset_action"] = "load"
+        r1c1, r1c2 = st.columns(2)
+        with r1c1:
+            if st.button("New", key="preset_new_button",
+                         use_container_width=True):
+                st.session_state["_pending_preset_action"] = "new"
+        with r1c2:
+            if st.button("Save", key="preset_save_button",
+                         use_container_width=True):
+                st.session_state["_pending_preset_action"] = "save"
 
-        update_column, rename_column, delete_column = st.columns(3)
-        with update_column:
-            if st.button("Update selected", key="update_preset_button"):
-                st.session_state["_pending_preset_action"] = "save_selected"
-        with rename_column:
-            if st.button("Rename selected", key="rename_preset_button"):
-                st.session_state["_pending_preset_action"] = "rename"
-        with delete_column:
-            if st.button("Delete selected", key="delete_preset_button"):
+        r2c1, r2c2 = st.columns(2)
+        with r2c1:
+            if st.button("Save As", key="preset_save_as_button",
+                         use_container_width=True):
+                st.session_state["_pending_preset_action"] = "save_as"
+        with r2c2:
+            if st.button("Delete", key="preset_delete_button",
+                         use_container_width=True):
                 st.session_state["_pending_preset_action"] = "delete"
 
     st.sidebar.header("Core Inputs")
@@ -755,6 +804,19 @@ def main() -> None:
             preset_map=preset_map,
             preset_dir=preset_dir,
         )
+    else:
+        pending_auto_load = st.session_state.pop("_pending_preset_auto_load", None)
+        if isinstance(pending_auto_load, str) and pending_auto_load in preset_map:
+            if _has_unsaved_changes():
+                st.session_state["_show_discard_warning_for"] = pending_auto_load
+                st.rerun()
+            else:
+                _execute_preset_action(
+                    action="load",
+                    selected_preset=pending_auto_load,
+                    preset_map=preset_map,
+                    preset_dir=preset_dir,
+                )
 
     if not run_model:
         st.info("Set assumptions in the sidebar, then click Run simulation.")
