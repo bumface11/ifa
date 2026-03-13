@@ -297,12 +297,7 @@ def _run_preset_simulation(preset_num: int, preset_state: JsonMap) -> dict:
             dc_pots=[(57, primary_dc_pot)] if primary_dc_pot > 0 else [],
         )
 
-        baseline_metrics = summarize_path(
-            ages=ages,
-            balances=baseline_balances,
-            baseline_spending=baseline_spending,
-            db_income=db_income,
-        )
+        baseline_metrics = summarize_path(baseline_balances)
 
         # Run Monte Carlo for scenario metrics
         _, monte_carlo_paths = run_monte_carlo_simulation(
@@ -322,9 +317,7 @@ def _run_preset_simulation(preset_num: int, preset_state: JsonMap) -> dict:
             dc_pots=[(57, primary_dc_pot)] if primary_dc_pot > 0 else [],
         )
 
-        monte_carlo_metrics = summarize_monte_carlo(
-            ages=ages, paths=monte_carlo_paths
-        )
+        monte_carlo_metrics = summarize_monte_carlo(monte_carlo_paths)
 
         # For comparison, scenario = baseline
         scenario_metrics = baseline_metrics
