@@ -517,7 +517,10 @@ def main() -> None:
     _apply_pending_sidebar_updates()
 
     # Load preset from URL if present
-    url_preset_state = decode_preset_url(st.query_params.to_dict().get("preset", ""))
+    preset_param = st.query_params.get("preset", "")
+    url_preset_state = (
+        decode_preset_url(f"preset={preset_param}") if preset_param else None
+    )
     if url_preset_state and "_loaded_sidebar_state" not in st.session_state:
         st.session_state["_loaded_sidebar_state"] = url_preset_state
 
