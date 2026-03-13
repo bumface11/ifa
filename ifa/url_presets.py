@@ -114,3 +114,84 @@ def get_current_page_url() -> str | None:
         return base_url
     except ImportError:
         return None
+
+
+def decode_comparison_presets(query_params: dict[str, str]) -> list[JsonMap]:
+    """Decode multiple preset parameters from query params for comparison mode.
+
+    Args:
+        query_params: Dictionary from st.query_params (e.g. from st.query_params.to_dict())
+
+    Returns:
+        List of decoded preset states (1-5 presets), empty if none present.
+    """
+    presets: list[JsonMap] = []
+
+    # Check for preset1, preset2, ..., preset5
+    for i in range(1, 6):
+        param_name = f"preset{i}"
+        param_value = query_params.get(param_name, "")
+
+        if not param_value:
+            continue
+
+        # Decode the preset value directly (it's already base64-encoded)
+        try:
+            padding = (4 - len(param_value) % 4) % 4
+            param_value_padded = param_value + '=' * padding
+
+            compressed = base64.urlsafe_b64decode(param_value_padded)
+            json_bytes = zlib.decompress(compressed)
+            payload = orjson.loads(json_bytes)
+
+            if not isinstance(payload, dict):
+                continue
+
+            # Validate and normalize state
+            normalized_state: JsonMap = {}
+            for key, value in payload.items():
+                if isinstance(key, str) and isinstance(
+                    value, (str, int, float, bool)
+                ):
+                    normalized_state[key] = value
+                elif isinstance(key, str) and value is None:
+                    normalized_state[key] = None
+
+            if normalized_state:
+                presets.append(normalized_state)
+
+        except (ValueError, TypeError, zlib.error, orjson.JSONDecodeError):
+            continue
+
+    return presets
+
+
+def encode_comparison_url(
+    base_url: str, presets: list[JsonMap]
+) -> str:
+    """Encode multiple presets into a single shareable URL.
+
+    Args:
+        base_url: Base URL (e.g., "http://localhost:8501")
+        presets: List of preset states to encode (1-5 presets)
+
+    Returns:
+        Full URL with multiple preset parameters.
+    """
+    if not presets or len(presets) > 5:
+        raise ValueError("Must provide 1-5 presets")
+
+    parsed = urlparse(base_url)
+    params = parse_qs(parsed.query, keep_blank_values=True)
+
+    # Encode each preset
+    for i, preset_state in enumerate(presets, start=1):
+        param_name = f"preset{i}"
+        json_bytes = orjson.dumps(preset_state)
+        compressed = zlib.compress(json_bytes, level=9)
+        encoded = base64.urlsafe_b64encode(compressed).decode('ascii').rstrip('=')
+        params[param_name] = [encoded]
+
+    query = urlencode(params, doseq=True)
+    new_parsed = parsed._replace(query=query)
+    return urlunparse(new_parsed)

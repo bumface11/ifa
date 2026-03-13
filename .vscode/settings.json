@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^&\"C:/Users/Mich/ifa/\\.venv/Scripts/python\\.exe\" -m pytest tests/test_url_presets\\.py -v$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

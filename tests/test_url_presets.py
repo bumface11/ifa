@@ -2,7 +2,12 @@
 
 import pytest
 
-from ifa.url_presets import decode_preset_url, encode_preset_url
+from ifa.url_presets import (
+    decode_comparison_presets,
+    decode_preset_url,
+    encode_comparison_url,
+    encode_preset_url,
+)
 
 
 def test_encode_and_decode_simple_preset() -> None:
@@ -104,3 +109,81 @@ def test_encode_handles_different_base_urls() -> None:
 
     assert decode_preset_url(query1) == preset
     assert decode_preset_url(query2) == preset
+
+
+def test_encode_and_decode_comparison_presets() -> None:
+    """Test encoding and decoding multiple presets for comparison."""
+    from urllib.parse import urlparse, parse_qs
+
+    preset1 = {
+        "start_age_input": 52,
+        "end_age_input": 95,
+        "tax_free_pot_input": 336000.0,
+    }
+    preset2 = {
+        "start_age_input": 55,
+        "end_age_input": 90,
+        "tax_free_pot_input": 500000.0,
+    }
+    preset3 = {
+        "start_age_input": 60,
+        "end_age_input": 85,
+        "tax_free_pot_input": 250000.0,
+    }
+
+    presets = [preset1, preset2, preset3]
+
+    # Encode multiple presets
+    url = encode_comparison_url("http://localhost:8501", presets)
+    assert "preset1=" in url
+    assert "preset2=" in url
+    assert "preset3=" in url
+
+    # Decode multiple presets - use urllib to properly parse query string
+    parsed_url = urlparse(url)
+    query_dict = parse_qs(parsed_url.query, keep_blank_values=True)
+    # parse_qs returns lists, so extract first element
+    query_dict = {k: v[0] if v else "" for k, v in query_dict.items()}
+
+    decoded_presets = decode_comparison_presets(query_dict)
+    assert len(decoded_presets) == 3
+    assert decoded_presets[0] == preset1
+    assert decoded_presets[1] == preset2
+    assert decoded_presets[2] == preset3
+
+
+def test_comparison_url_with_5_presets() -> None:
+    """Test that up to 5 presets can be encoded and decoded."""
+    presets = [
+        {f"key_{i}": float(i)} for i in range(5)
+    ]
+
+    url = encode_comparison_url("http://localhost:8501", presets)
+    for i in range(1, 6):
+        assert f"preset{i}=" in url
+
+
+def test_comparison_url_rejects_more_than_5_presets() -> None:
+    """Test that encoding more than 5 presets raises ValueError."""
+    presets = [{f"key_{i}": float(i)} for i in range(6)]
+
+    with pytest.raises(ValueError):
+        encode_comparison_url("http://localhost:8501", presets)
+
+
+def test_decode_comparison_presets_with_empty_dict() -> None:
+    """Test decoding with no preset parameters."""
+    result = decode_comparison_presets({})
+    assert result == []
+
+
+def test_decode_comparison_presets_mixed_valid_invalid() -> None:
+    """Test decoding when some presets are invalid."""
+    query_dict = {
+        "preset1": "valid_base64",  # This will fail to decode
+        "preset2": "also_invalid",
+        "preset3": "",  # Empty
+    }
+    result = decode_comparison_presets(query_dict)
+    # Should only return successfully decoded presets (0 in this case)
+    assert isinstance(result, list)
