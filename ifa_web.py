@@ -78,6 +78,7 @@ def _ensure_sidebar_defaults() -> None:
         "step_count": 1,
     }
     for key, value in defaults.items():
+        # Only set default if key doesn't already exist (e.g., from URL preset)
         if key not in st.session_state:
             st.session_state[key] = value
 
@@ -513,16 +514,18 @@ def main() -> None:
 
     run_model = st.button("Run simulation", type="primary")
 
+    # Load and apply URL preset BEFORE initializing defaults or widgets
+    preset_param = st.query_params.get("preset", "")
+    if preset_param:
+        url_preset_state = decode_preset_url(f"preset={preset_param}")
+        if url_preset_state:
+            # Apply URL preset values directly to session state before defaults
+            for key, value in url_preset_state.items():
+                st.session_state[key] = value
+            st.session_state["_last_loaded_preset_state"] = url_preset_state
+
     _ensure_sidebar_defaults()
     _apply_pending_sidebar_updates()
-
-    # Load preset from URL if present
-    preset_param = st.query_params.get("preset", "")
-    url_preset_state = (
-        decode_preset_url(f"preset={preset_param}") if preset_param else None
-    )
-    if url_preset_state and "_loaded_sidebar_state" not in st.session_state:
-        st.session_state["_loaded_sidebar_state"] = url_preset_state
 
     st.sidebar.header("Parameter Sets")
     with st.sidebar.container():
