@@ -99,20 +99,12 @@ def _execute_preset_action(action: str) -> None:
 
     Actions:
         new: Reset to defaults and clear any loaded state.
-        generate_url: Generate a shareable URL with current preset state.
     """
     if action == "new":
         # Reset sidebar to defaults
         _ensure_sidebar_defaults()
         st.session_state.pop("_last_loaded_preset_state", None)
         st.session_state["_preset_notice"] = "Reset to defaults"
-        st.rerun()
-
-    if action == "generate_url":
-        current_state = _collect_sidebar_state()
-        st.session_state["_last_loaded_preset_state"] = current_state
-        # Note: actual URL generation will be done in the UI with full page URL
-        st.session_state["_show_share_url"] = True
         st.rerun()
 
 
@@ -546,29 +538,30 @@ def main() -> None:
 
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("Generate URL", key="preset_share_button",
-                         use_container_width=True, help="Create a shareable URL with current parameters"):
-                st.session_state["_pending_preset_action"] = "generate_url"
+            if st.button("Share Link", key="preset_share_button",
+                         use_container_width=True, help="Copy the current URL with your parameters"):
+                st.session_state["_show_share_url"] = True
         with col2:
             if st.button("Reset", key="preset_new_button",
                          use_container_width=True, help="Reset to default parameters"):
                 st.session_state["_pending_preset_action"] = "new"
 
-        # Show shareable URL if generated
-        if st.session_state.get("_show_share_url"):
+        # Show shareable URL when requested
+        if st.session_state.pop("_show_share_url", False):
             st.divider()
             st.markdown("#### 📋 Share Your Preset")
-            current_state = _collect_sidebar_state()
+            st.caption("Copy this URL and share it with others to let them see your parameters:")
             
-            # Get the page base URL - Streamlit's server URL
+            # Reconstruct the current page URL with the preset parameter
+            # The preset is already in st.query_params, so we can just show the current URL
             import os
-            streamlit_server_url = os.getenv("STREAMLIT_SERVER_BASEURL", "http://localhost:8501")
-            
-            # Encode the preset into the URL
-            shareable_url = encode_preset_url(streamlit_server_url, current_state)
-            
-            st.code(shareable_url, language="text", line_numbers=False)
-            st.caption("Click the copy icon to copy the URL, then share it with others!")
+            server_url = os.getenv("STREAMLIT_SERVER_BASEURL", "http://localhost:8501")
+            preset_param = st.query_params.get("preset", "")
+            if preset_param:
+                shareable_url = f"{server_url}?preset={preset_param}"
+                st.code(shareable_url, language="text", line_numbers=False)
+            else:
+                st.warning("Adjust some parameters first to generate a shareable URL.")
             st.divider()
 
     st.sidebar.header("Core Inputs")

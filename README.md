@@ -99,12 +99,11 @@ pots and start ages.
   scrolling in the control panel.
 - Collapsible `DC Pot Inputs` section supporting multiple DC pots with per-pot
   drawdown start ages.
-- **Shareable presets**: click `Generate URL` to create a shareable link encoding
-  all current parameters. Share the link with others or bookmark it for later.
-  When someone visits a shared link, parameters load automatically.
+- **Shareable presets**: The URL automatically updates as you adjust parameters.
+  Click `Share Link` to display the current URL with a copy button. Share it with
+  others or bookmark it for later. When someone visits a shared link, parameters
+  load automatically.
 - The `Reset` button returns to default parameters.
-- Unsaved-changes detection warns if you load a new URL while parameters differ
-  from the last loaded preset.
 - Editable name fields for each DC pot and each life event, with sensible
   default names.
 - Editable name fields for each DB pension stream, with sensible defaults.
