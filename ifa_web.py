@@ -310,9 +310,9 @@ def _run_preset_simulation(preset_num: int, preset_state: JsonMap) -> dict:
             end_age=end_age,
             mean_return=mean_return,
             std_return=std_return,
+            strategy_fn=base_strategy,
             num_simulations=min(num_simulations, 500),  # Lower for faster comparison
-            random_seed=random_seed,
-            drawdown_fn=base_strategy,
+            seed=random_seed,
             withdrawals_required=baseline_required,
             dc_pots=[(57, primary_dc_pot)] if primary_dc_pot > 0 else [],
         )
