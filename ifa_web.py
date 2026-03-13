@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
@@ -676,6 +677,20 @@ def main() -> None:
 
     with st.sidebar.expander("Life Event Inputs", expanded=False):
         life_events, life_event_names = _build_life_events(start_age, end_age)
+
+    # Update URL with current parameters every time they change
+    current_state = _collect_sidebar_state()
+    current_preset_value = st.query_params.get("preset", "")
+    
+    # Generate a new preset URL value
+    dummy_url = encode_preset_url("http://temp", current_state)
+    # Extract just the preset parameter value
+    match = re.search(r"preset=([^&]*)", dummy_url)
+    new_preset_value = match.group(1) if match else ""
+    
+    # Only update if the URL has changed to avoid unnecessary reruns
+    if new_preset_value and new_preset_value != current_preset_value:
+        st.query_params["preset"] = new_preset_value
 
     pending_preset_action = st.session_state.pop("_pending_preset_action", None)
     if isinstance(pending_preset_action, str):
