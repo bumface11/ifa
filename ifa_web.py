@@ -515,15 +515,25 @@ def main() -> None:
 
     run_model = st.button("Run simulation", type="primary")
 
-    # Load and apply URL preset BEFORE initializing defaults or widgets
+    # Load and apply URL preset on first visit or when preset parameter changes
+    # This allows users to paste a new shared URL to load different presets
     preset_param = st.query_params.get("preset", "")
-    if preset_param:
-        url_preset_state = decode_preset_url(f"preset={preset_param}")
-        if url_preset_state:
-            # Apply URL preset values directly to session state before defaults
-            for key, value in url_preset_state.items():
-                st.session_state[key] = value
-            st.session_state["_last_loaded_preset_state"] = url_preset_state
+    last_loaded_preset = st.session_state.get("_last_url_preset_param", "")
+    
+    # Load if: (1) not loaded yet, OR (2) preset param changed (new shared URL pasted)
+    if not st.session_state.get("_url_preset_loaded") or (
+        preset_param and preset_param != last_loaded_preset
+    ):
+        if preset_param:
+            url_preset_state = decode_preset_url(f"preset={preset_param}")
+            if url_preset_state:
+                # Apply URL preset values directly to session state before defaults
+                for key, value in url_preset_state.items():
+                    st.session_state[key] = value
+                st.session_state["_last_loaded_preset_state"] = url_preset_state
+        # Mark that we've loaded the URL preset and record which param we loaded
+        st.session_state["_url_preset_loaded"] = True
+        st.session_state["_last_url_preset_param"] = preset_param
 
     _ensure_sidebar_defaults()
     _apply_pending_sidebar_updates()
@@ -680,7 +690,6 @@ def main() -> None:
 
     # Update URL with current parameters every time they change
     current_state = _collect_sidebar_state()
-    current_preset_value = st.query_params.get("preset", "")
     
     # Generate a new preset URL value
     dummy_url = encode_preset_url("http://temp", current_state)
@@ -688,9 +697,17 @@ def main() -> None:
     match = re.search(r"preset=([^&]*)", dummy_url)
     new_preset_value = match.group(1) if match else ""
     
-    # Only update if the URL has changed to avoid unnecessary reruns
-    if new_preset_value and new_preset_value != current_preset_value:
+    # Track the last URL preset value we set to avoid cascading updates
+    # This prevents lag from repeated reruns when comparing with st.query_params
+    if "_last_url_preset_value" not in st.session_state:
+        st.session_state["_last_url_preset_value"] = st.query_params.get("preset", "")
+    
+    last_url_preset = st.session_state["_last_url_preset_value"]
+    
+    # Only update if the parameters have actually changed (not a rerun echo)
+    if new_preset_value and new_preset_value != last_url_preset:
         st.query_params["preset"] = new_preset_value
+        st.session_state["_last_url_preset_value"] = new_preset_value
 
     pending_preset_action = st.session_state.pop("_pending_preset_action", None)
     if isinstance(pending_preset_action, str):
