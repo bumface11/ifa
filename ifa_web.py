@@ -39,9 +39,12 @@ from ifa.plotting import (
     plot_sequence_of_returns_scenarios,
 )
 from ifa.url_presets import (
+    decode_comparison_presets,
     decode_preset_url,
+    encode_comparison_url,
     encode_preset_url,
 )
+from ifa.url_presets import JsonMap
 from ifa.strategies import create_fixed_real_drawdown_strategy
 
 _TRACKED_STATIC_KEYS: tuple[str, ...] = (
@@ -106,6 +109,61 @@ def _execute_preset_action(action: str) -> None:
         st.session_state.pop("_last_loaded_preset_state", None)
         st.session_state["_preset_notice"] = "Reset to defaults"
         st.rerun()
+
+
+def _load_comparison_presets() -> list[tuple[int, JsonMap]]:
+    """Load all comparison presets from URL parameters.
+
+    Returns:
+        List of (preset_number, preset_state) tuples for preset1-preset5.
+    """
+    query_dict = st.query_params.to_dict()
+    presets_list = decode_comparison_presets(query_dict)
+
+    # Return as list of (index, preset) for easy enumeration
+    return list(enumerate(presets_list, start=1))
+
+
+def _render_comparison_controls() -> None:
+    """Render UI controls for comparison mode in the sidebar."""
+    with st.sidebar.expander("📊 Comparison Mode", expanded=False):
+        st.markdown("Add presets to compare side-by-side.")
+
+        # Show current comparison count
+        query_dict = st.query_params.to_dict()
+        active_presets = decode_comparison_presets(query_dict)
+        active_count = len(active_presets)
+
+        if active_count > 0:
+            st.info(f"Comparing {active_count} preset(s)")
+
+            if active_count < 5:
+                if st.button(
+                    "Add Another Preset",
+                    key="add_preset_button",
+                    use_container_width=True,
+                ):
+                    # Paste a preset URL or code here
+                    st.session_state["_show_add_preset_dialog"] = True
+
+            if st.button(
+                "Clear Comparison",
+                key="clear_compare_button",
+                use_container_width=True,
+            ):
+                # Clear all comparison presets
+                for i in range(1, 6):
+                    st.query_params.pop(f"preset{i}", None)
+                st.rerun()
+
+        else:
+            st.write("No comparison presets loaded yet.")
+            if st.button(
+                "Start Comparison",
+                key="start_compare_button",
+                use_container_width=True,
+            ):
+                st.session_state["_show_add_preset_dialog"] = True
 
 
 def _tracked_dynamic_keys() -> list[str]:
@@ -563,6 +621,9 @@ def main() -> None:
             else:
                 st.warning("Adjust some parameters first to generate a shareable URL.")
             st.divider()
+
+    # Render comparison mode controls
+    _render_comparison_controls()
 
     st.sidebar.header("Core Inputs")
     start_age = int(
