@@ -219,6 +219,11 @@ def _render_comparison_results(
                     "Ruin probability",
                     f"{monte_carlo_metrics.ruin_probability * 100:.1f}%",
                 )
+            else:
+                st.warning(
+                    f"Missing metrics: baseline={baseline_metrics}, "
+                    f"scenario={scenario_metrics}, monte_carlo={monte_carlo_metrics}"
+                )
 
 
 @st.cache_data
@@ -329,7 +334,10 @@ def _run_preset_simulation(preset_num: int, preset_state: JsonMap) -> dict:
         }
 
     except Exception as e:
-        st.error(f"Failed to simulate preset {preset_num}: {str(e)}")
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Comparison simulation error for preset {preset_num}: {e}", exc_info=True)
+        st.error(f"Failed to simulate preset {preset_num}: {type(e).__name__}: {str(e)}")
         return None
 
 
