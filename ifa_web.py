@@ -708,6 +708,9 @@ def main() -> None:
     if new_preset_value and new_preset_value != last_url_preset:
         st.query_params["preset"] = new_preset_value
         st.session_state["_last_url_preset_value"] = new_preset_value
+        # Mark that we've already loaded this preset value to prevent reloading
+        # on the same rerun that updates the URL
+        st.session_state["_last_url_preset_param"] = new_preset_value
 
     pending_preset_action = st.session_state.pop("_pending_preset_action", None)
     if isinstance(pending_preset_action, str):
