@@ -166,6 +166,180 @@ def _render_comparison_controls() -> None:
                 st.session_state["_show_add_preset_dialog"] = True
 
 
+def _render_comparison_results(
+    comparison_presets: list[tuple[int, JsonMap]], save_outputs: bool
+) -> None:
+    """Render side-by-side comparison of multiple presets with metrics.
+
+    Args:
+        comparison_presets: List of (preset_number, preset_state) tuples
+        save_outputs: Whether to save charts to output/
+    """
+    st.markdown("## 📊 Preset Comparison")
+    st.caption(f"Comparing {len(comparison_presets)} preset(s) side-by-side")
+
+    # Run simulations for each preset in parallel (simulated via caching)
+    results = []
+    for preset_num, preset_state in comparison_presets:
+        result = _run_preset_simulation(preset_num, preset_state)
+        if result:
+            results.append((preset_num, preset_state, result))
+
+    if not results:
+        st.error("Failed to run simulations for comparison presets.")
+        return
+
+    # Display results in columns
+    cols = st.columns(min(len(results), 3))  # Max 3 columns for readability
+
+    for col_idx, (preset_num, preset_state, sim_result) in enumerate(results):
+        with cols[col_idx % len(cols)]:
+            preset_name = preset_state.get("_preset_name", f"Preset {preset_num}")
+            st.markdown(f"### {preset_name}")
+
+            # Extract metrics from simulation result
+            baseline_metrics = sim_result.get("baseline_metrics")
+            scenario_metrics = sim_result.get("scenario_metrics")
+            monte_carlo_metrics = sim_result.get("monte_carlo_metrics")
+
+            if baseline_metrics and scenario_metrics and monte_carlo_metrics:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric(
+                        "Baseline ending",
+                        f"£{baseline_metrics.ending_balance:,.0f}",
+                    )
+                with col2:
+                    st.metric(
+                        "Scenario ending",
+                        f"£{scenario_metrics.ending_balance:,.0f}",
+                    )
+
+                st.metric(
+                    "Ruin probability",
+                    f"{monte_carlo_metrics.ruin_probability * 100:.1f}%",
+                )
+
+
+@st.cache_data
+def _run_preset_simulation(preset_num: int, preset_state: JsonMap) -> dict:
+    """Run simulation for a single preset and cache results.
+
+    Args:
+        preset_num: Preset number (1-5) for cache keying
+        preset_state: Preset parameter state
+
+    Returns:
+        Dictionary with simulation results (metrics, etc.)
+    """
+    try:
+        # Extract parameters from preset
+        start_age = int(preset_state.get("start_age_input", START_AGE))
+        end_age = int(preset_state.get("end_age_input", END_AGE))
+        tax_free_pot = float(preset_state.get("tax_free_pot_input", INITIAL_TAX_FREE_POT))
+        baseline_spending = float(preset_state.get("baseline_spending_input", 30_000.0))
+        mean_return = float(preset_state.get("mean_return_input", MEAN_RETURN))
+        std_return = float(preset_state.get("std_return_input", STD_RETURN))
+        random_seed = int(preset_state.get("random_seed_input", RANDOM_SEED))
+        num_simulations = int(preset_state.get("num_simulations_input", NUM_SIMULATIONS))
+
+        # Build DC pots from preset (simplified - assumes single pot for comparison)
+        primary_dc_pot = float(
+            preset_state.get("dc_initial_balance_0", INITIAL_DC_POT)
+        )
+
+        # Build DB pensions (simplified)
+        db_pensions = []
+        for i in range(3):
+            age_key = f"db_age_{i}"
+            amount_key = f"db_amount_{i}"
+            if age_key in preset_state and amount_key in preset_state:
+                db_pensions.append(
+                    (
+                        int(preset_state[age_key]),
+                        float(preset_state[amount_key]),
+                    )
+                )
+
+        # Run simplified simulation (baseline only for comparison)
+        ages = np.arange(start_age, end_age + 1, dtype=np.int_)
+        db_income = np.array(
+            [calculate_db_pension_income(int(age), db_pensions) for age in ages],
+            dtype=np.float64,
+        )
+
+        baseline_required = build_required_withdrawals(
+            ages=ages,
+            baseline_spending=baseline_spending,
+            db_income=db_income,
+            events=(),
+        )
+
+        years = end_age - start_age
+        returns = (
+            np.random.default_rng(random_seed)
+            .normal(mean_return, std_return, years)
+            .astype(np.float64)
+        )
+
+        base_strategy = create_fixed_real_drawdown_strategy(baseline_spending)
+        _, baseline_balances, *_ = simulate_multi_pot_pension_path(
+            tax_free_pot=tax_free_pot,
+            dc_pot=primary_dc_pot,
+            secondary_dc_pot=0.0,
+            secondary_dc_drawdown_age=end_age,
+            db_pensions=db_pensions,
+            start_age=start_age,
+            end_age=end_age,
+            returns=returns,
+            drawdown_fn=base_strategy,
+            withdrawals_required=baseline_required,
+            dc_pots=[(57, primary_dc_pot)] if primary_dc_pot > 0 else [],
+        )
+
+        baseline_metrics = summarize_path(
+            ages=ages,
+            balances=baseline_balances,
+            baseline_spending=baseline_spending,
+            db_income=db_income,
+        )
+
+        # Run Monte Carlo for scenario metrics
+        _, monte_carlo_paths = run_monte_carlo_simulation(
+            tax_free_pot=tax_free_pot,
+            dc_pot=primary_dc_pot,
+            secondary_dc_pot=0.0,
+            secondary_dc_drawdown_age=end_age,
+            db_pensions=db_pensions,
+            start_age=start_age,
+            end_age=end_age,
+            mean_return=mean_return,
+            std_return=std_return,
+            num_simulations=min(num_simulations, 500),  # Lower for faster comparison
+            random_seed=random_seed,
+            drawdown_fn=base_strategy,
+            withdrawals_required=baseline_required,
+            dc_pots=[(57, primary_dc_pot)] if primary_dc_pot > 0 else [],
+        )
+
+        monte_carlo_metrics = summarize_monte_carlo(
+            ages=ages, paths=monte_carlo_paths
+        )
+
+        # For comparison, scenario = baseline
+        scenario_metrics = baseline_metrics
+
+        return {
+            "baseline_metrics": baseline_metrics,
+            "scenario_metrics": scenario_metrics,
+            "monte_carlo_metrics": monte_carlo_metrics,
+        }
+
+    except Exception as e:
+        st.error(f"Failed to simulate preset {preset_num}: {str(e)}")
+        return None
+
+
 def _tracked_dynamic_keys() -> list[str]:
     """Build the dynamic widget-key list based on current item counts."""
     keys: list[str] = []
@@ -772,6 +946,13 @@ def main() -> None:
 
     if not run_model:
         st.info("Set assumptions in the sidebar, then click Run simulation.")
+        return
+
+    # Check if we're in comparison mode
+    comparison_presets = _load_comparison_presets()
+    if comparison_presets:
+        # Render comparison mode with multiple presets
+        _render_comparison_results(comparison_presets, save_outputs)
         return
 
     output_dir = Path("output")
