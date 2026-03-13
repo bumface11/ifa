@@ -1,14 +1,14 @@
 {
   "version": 1,
   "name": "Michael_basic",
-  "saved_at": "2026-03-11T21:46:49.153367+00:00",
+  "saved_at": "2026-03-12T21:12:00.451345+00:00",
   "sidebar_state": {
     "start_age_input": 52,
     "end_age_input": 95,
     "tax_free_pot_input": 336000.0,
     "baseline_spending_input": 30000.0,
     "mean_return_input": 0.04,
-    "std_return_input": 0.1,
+    "std_return_input": 0.2,
     "random_seed_input": 42,
     "num_simulations_input": 1000,
     "save_outputs_input": false,

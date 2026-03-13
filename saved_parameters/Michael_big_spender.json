@@ -1,21 +1,21 @@
 {
   "version": 1,
   "name": "Michael_big_spender",
-  "saved_at": "2026-03-11T22:01:58.775946+00:00",
+  "saved_at": "2026-03-12T21:45:39.029848+00:00",
   "sidebar_state": {
     "start_age_input": 52,
     "end_age_input": 95,
     "tax_free_pot_input": 336000.0,
     "baseline_spending_input": 30000.0,
     "mean_return_input": 0.04,
-    "std_return_input": 0.1,
+    "std_return_input": 0.2,
     "random_seed_input": 42,
     "num_simulations_input": 1000,
     "save_outputs_input": false,
     "dc_pot_count": 2,
     "db_stream_count": 3,
-    "lump_count": 2,
-    "step_count": 0,
+    "lump_count": 3,
+    "step_count": 1,
     "dc_name_0": "HRIS DC",
     "dc_start_age_0": 57,
     "dc_initial_balance_0": 311000.0,
@@ -36,6 +36,14 @@
     "lump_amount_0": 15000.0,
     "lump_name_1": "Property",
     "lump_age_1": 53,
-    "lump_amount_1": 180000.0
+    "lump_amount_1": 180000.0,
+    "lump_name_2": "Heat pump up-front",
+    "lump_age_2": 53,
+    "lump_amount_2": 7500.0,
+    "step_name_0": "Heat pump loan repayment",
+    "step_start_0": 54,
+    "step_amount_0": 750.0,
+    "step_has_end_0": true,
+    "step_end_0": 63
   }
 }
