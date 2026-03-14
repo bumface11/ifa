@@ -167,33 +167,35 @@ def _render_comparison_controls() -> None:
                 st.session_state["_show_add_preset_dialog"] = True
 
 
-def _reorder_comparison_presets(primary_idx: int) -> None:
-    """Move a preset to primary position by reordering URL parameters.
+def _reorder_comparison_presets(secondary_idx: int) -> None:
+    """Move a secondary preset to primary position by reordering URL parameters.
     
     Args:
-        primary_idx: Index (0-based) of the preset to make primary
+        secondary_idx: 0-based index within secondary presets (first secondary is 0)
     """
-    query_dict = st.query_params.to_dict()
-    
-    # Get current preset parameters
-    preset_params = []
+    # Collect current presets in order (preset1, preset2, ..., preset5)
+    preset_values = []
     for i in range(1, 6):
-        key = f"preset{i}" if i > 1 else "preset"
-        if key in query_dict:
-            preset_params.append((i, query_dict[key]))
+        param_name = f"preset{i}"
+        if param_name in st.query_params:
+            preset_values.append(st.query_params[param_name])
     
-    if primary_idx >= len(preset_params):
+    if secondary_idx >= len(preset_values) - 1:
+        # Can't select the main preset (index 0)
         return
     
-    # Move the selected preset to the front
-    selected_num, selected_value = preset_params.pop(primary_idx)
+    # The secondary preset to promote is at index (1 + secondary_idx)
+    selected_value = preset_values.pop(1 + secondary_idx)
     
-    # Update query params with reordered presets
-    st.query_params.clear()
-    st.query_params["preset"] = selected_value
-    for i, (_, value) in enumerate(preset_params, start=2):
+    # Clear all presets and re-set with new order
+    for i in range(1, 6):
+        param_name = f"preset{i}"
+        st.query_params.pop(param_name, None)
+    
+    # Set with reordered values: selected goes to preset1, rest shift
+    st.query_params["preset1"] = selected_value
+    for i, value in enumerate(preset_values, start=2):
         st.query_params[f"preset{i}"] = value
-    st.rerun()
 
 
 def _render_comparison_results(
@@ -230,6 +232,25 @@ def _render_comparison_results(
     with left_col:
         preset_num, preset_state, sim_result = main_result
         preset_name = preset_state.get("_preset_name", f"Preset {preset_num}")
+        
+        # Extract all needed parameters from preset for plotting functions
+        start_age = int(preset_state.get("start_age_input", START_AGE))
+        end_age = int(preset_state.get("end_age_input", END_AGE))
+        tax_free_pot = float(preset_state.get("tax_free_pot_input", INITIAL_TAX_FREE_POT))
+        baseline_spending = float(preset_state.get("baseline_spending_input", 30_000.0))
+        mean_return = float(preset_state.get("mean_return_input", MEAN_RETURN))
+        std_return = float(preset_state.get("std_return_input", STD_RETURN))
+        random_seed = int(preset_state.get("random_seed_input", RANDOM_SEED))
+        num_simulations = int(preset_state.get("num_simulations_input", NUM_SIMULATIONS))
+        
+        primary_dc_pot = float(preset_state.get("dc_initial_balance_0", INITIAL_DC_POT))
+        db_pensions = []
+        for i in range(3):
+            age_key = f"db_age_{i}"
+            amount_key = f"db_amount_{i}"
+            if age_key in preset_state and amount_key in preset_state:
+                db_pensions.append((int(preset_state[age_key]), float(preset_state[amount_key])))
+        
         st.markdown(f"### {preset_name}")
 
         # Metrics for main preset
@@ -255,197 +276,147 @@ def _render_comparison_results(
                     f"{monte_carlo_metrics.ruin_probability * 100:.1f}%",
                 )
 
-        # Balance trajectory chart for main preset
-        ages = sim_result.get("ages")
+        # Use plotting functions for proper charts
+        st.markdown("#### Balance Trajectory")
         baseline_balances = sim_result.get("baseline_balances")
         scenario_balances = sim_result.get("scenario_balances")
-
-        if ages is not None and baseline_balances is not None:
-            st.markdown("#### Balance Trajectory")
+        ages = sim_result.get("ages")
+        
+        if baseline_balances is not None and scenario_balances is not None and ages is not None:
             fig, ax = plt.subplots(figsize=(7, 4))
-            ax.plot(
-                ages,
-                baseline_balances,
-                linewidth=2.5,
-                color="#1F77B4",
-                marker="o",
-                markersize=4,
-                label="Baseline",
-            )
-            if scenario_balances is not None and not np.array_equal(
-                baseline_balances, scenario_balances
-            ):
-                ax.plot(
-                    ages,
-                    scenario_balances,
-                    linewidth=2.5,
-                    color="#FF7F0E",
-                    marker="s",
-                    markersize=4,
-                    label="Scenario",
-                )
+            ax.plot(ages, baseline_balances, linewidth=2.5, color="#1F77B4", marker="o", markersize=4, label="Baseline")
+            if not np.array_equal(baseline_balances, scenario_balances):
+                ax.plot(ages, scenario_balances, linewidth=2.5, color="#FF7F0E", marker="s", markersize=4, label="Scenario")
             ax.set_xlabel("Age", fontsize=10)
             ax.set_ylabel("Balance (£)", fontsize=10)
             ax.legend(fontsize=9, loc="best")
             ax.grid(True, alpha=0.3)
-            ax.yaxis.set_major_formatter(
-                plt.FuncFormatter(
-                    lambda x, p: f"£{x/1e6:.1f}M"
-                    if x >= 1e6
-                    else f"£{x/1e3:.0f}K"
-                )
-            )
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"£{x/1e6:.1f}M" if x >= 1e6 else f"£{x/1e3:.0f}K"))
             fig.tight_layout()
             st.pyplot(fig, width='stretch')
 
-        # Monte Carlo distribution for main preset
+        # Monte Carlo fan chart for main preset
+        st.markdown("#### Monte Carlo Distribution")
         monte_carlo_paths = sim_result.get("monte_carlo_paths")
-
+        
         if monte_carlo_paths is not None and len(monte_carlo_paths) > 0:
-            st.markdown("#### Monte Carlo Distribution")
-            final_balances = monte_carlo_paths[:, -1]
-
-            fig, ax = plt.subplots(figsize=(7, 4))
-            ax.hist(
-                final_balances,
-                bins=30,
-                color="#2CA02C",
-                alpha=0.7,
-                edgecolor="black",
-            )
-            ax.axvline(
-                np.median(final_balances),
-                color="red",
-                linestyle="--",
-                linewidth=2,
-                label=f"Median: £{np.median(final_balances):,.0f}",
-            )
-            ax.set_xlabel("Final Balance (£)", fontsize=10)
-            ax.set_ylabel("Simulations", fontsize=10)
-            ax.legend(fontsize=9)
-            ax.grid(True, alpha=0.3, axis="y")
-            ax.xaxis.set_major_formatter(
-                plt.FuncFormatter(
-                    lambda x, p: f"£{x/1e6:.1f}M"
-                    if x >= 1e6
-                    else f"£{x/1e3:.0f}K"
+            try:
+                fan_fig = plot_monte_carlo_fan_chart(
+                    tax_free_pot=tax_free_pot,
+                    dc_pot=primary_dc_pot,
+                    secondary_dc_pot=0.0,
+                    secondary_dc_drawdown_age=end_age,
+                    db_pensions=db_pensions,
+                    start_age=start_age,
+                    end_age=end_age,
+                    mean_return=mean_return,
+                    std_return=std_return,
+                    strategy_fn=create_fixed_real_drawdown_strategy(baseline_spending),
+                    num_simulations=min(num_simulations, 500),
+                    seed=random_seed,
+                    withdrawals_required=sim_result.get("baseline_required"),
+                    life_events=(),
+                    spending_drawdown_schedule=np.zeros(end_age - start_age + 1),
+                    dc_pots=[(57, primary_dc_pot)] if primary_dc_pot > 0 else [],
+                    dc_pot_names=["Primary DC"],
+                    db_pension_names=[f"DB {i+1}" for i in range(len(db_pensions))],
+                    life_event_names=[],
+                    save_output=save_outputs,
+                    return_figure=True,
+                    output_file=Path("output") / "comparison_fan.png" if save_outputs else None,
                 )
-            )
-            fig.tight_layout()
-            st.pyplot(fig, width='stretch')
+                if fan_fig is not None:
+                    st.pyplot(fan_fig, width='stretch')
+            except Exception as e:
+                # Fallback to simple histogram if fan chart fails
+                final_balances = monte_carlo_paths[:, -1]
+                fig, ax = plt.subplots(figsize=(7, 4))
+                ax.hist(final_balances, bins=30, color="#2CA02C", alpha=0.7, edgecolor="black")
+                ax.axvline(np.median(final_balances), color="red", linestyle="--", linewidth=2, label=f"Median: £{np.median(final_balances):,.0f}")
+                ax.set_xlabel("Final Balance (£)", fontsize=10)
+                ax.set_ylabel("Simulations", fontsize=10)
+                ax.legend(fontsize=9)
+                ax.grid(True, alpha=0.3, axis="y")
+                ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"£{x/1e6:.1f}M" if x >= 1e6 else f"£{x/1e3:.0f}K"))
+                fig.tight_layout()
+                st.pyplot(fig, width='stretch')
 
-    # Right column: Secondary presets stacked with shrunk charts
+    # Right column: Secondary presets in a grid layout
     if secondary_results:
         with right_col:
             st.markdown("### Other Presets")
-            for idx, (preset_num, preset_state, sim_result) in enumerate(
-                secondary_results
-            ):
-                preset_name = preset_state.get(
-                    "_preset_name", f"Preset {preset_num}"
-                )
+            
+            # Display secondary presets in 2 columns
+            for idx in range(0, len(secondary_results), 2):
+                cols = st.columns(2) if idx + 1 < len(secondary_results) else [st.columns(1)[0]]
+                
+                for col_idx, col in enumerate(cols):
+                    if idx + col_idx < len(secondary_results):
+                        preset_num, preset_state, sim_result = secondary_results[idx + col_idx]
+                        preset_name = preset_state.get("_preset_name", f"Preset {preset_num}")
+                        
+                        with col:
+                            # Clickable header to swap to main
+                            if st.button(
+                                f"📌 {preset_name}",
+                                key=f"swap_preset_{idx + col_idx}",
+                                use_container_width=True,
+                            ):
+                                _reorder_comparison_presets(idx + col_idx)
 
-                # Clickable header to swap to main
-                if st.button(
-                    f"📌 {preset_name}",
-                    key=f"swap_preset_{idx}",
-                    use_container_width=True,
-                ):
-                    _reorder_comparison_presets(idx + 1)
+                            # Compact metrics for secondary preset
+                            baseline_metrics = sim_result.get("baseline_metrics")
+                            scenario_metrics = sim_result.get("scenario_metrics")
+                            monte_carlo_metrics = sim_result.get("monte_carlo_metrics")
 
-                # Metrics for secondary preset
-                baseline_metrics = sim_result.get("baseline_metrics")
-                scenario_metrics = sim_result.get("scenario_metrics")
-                monte_carlo_metrics = sim_result.get("monte_carlo_metrics")
+                            if baseline_metrics and scenario_metrics and monte_carlo_metrics:
+                                metric_cols = st.columns(2)
+                                with metric_cols[0]:
+                                    st.metric(
+                                        "Baseline",
+                                        f"£{baseline_metrics.ending_balance/1e3:.0f}K",
+                                    )
+                                with metric_cols[1]:
+                                    st.metric(
+                                        "Ruin",
+                                        f"{monte_carlo_metrics.ruin_probability * 100:.0f}%",
+                                    )
 
-                if baseline_metrics and scenario_metrics and monte_carlo_metrics:
-                    metric_cols = st.columns(2)
-                    with metric_cols[0]:
-                        st.metric(
-                            "Baseline",
-                            f"£{baseline_metrics.ending_balance/1e3:.0f}K",
-                        )
-                    with metric_cols[1]:
-                        st.metric(
-                            "Ruin",
-                            f"{monte_carlo_metrics.ruin_probability * 100:.0f}%",
-                        )
+                            # Shrunk balance trajectory
+                            ages = sim_result.get("ages")
+                            baseline_balances = sim_result.get("baseline_balances")
+                            scenario_balances = sim_result.get("scenario_balances")
 
-                # Shrunk balance trajectory
-                ages = sim_result.get("ages")
-                baseline_balances = sim_result.get("baseline_balances")
-                scenario_balances = sim_result.get("scenario_balances")
+                            if ages is not None and baseline_balances is not None:
+                                fig, ax = plt.subplots(figsize=(4, 2.5))
+                                ax.plot(ages, baseline_balances, linewidth=1.5, color="#1F77B4", marker="o", markersize=2)
+                                if scenario_balances is not None and not np.array_equal(baseline_balances, scenario_balances):
+                                    ax.plot(ages, scenario_balances, linewidth=1.5, color="#FF7F0E", marker="s", markersize=2)
+                                ax.set_xlabel("Age", fontsize=8)
+                                ax.set_ylabel("Balance (£)", fontsize=8)
+                                ax.grid(True, alpha=0.2)
+                                ax.tick_params(labelsize=7)
+                                ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"£{x/1e6:.1f}M" if x >= 1e6 else f"£{x/1e3:.0f}K"))
+                                fig.tight_layout()
+                                st.pyplot(fig, width='stretch')
 
-                if ages is not None and baseline_balances is not None:
-                    fig, ax = plt.subplots(figsize=(4, 2.5))
-                    ax.plot(
-                        ages,
-                        baseline_balances,
-                        linewidth=1.5,
-                        color="#1F77B4",
-                        marker="o",
-                        markersize=2,
-                    )
-                    if scenario_balances is not None and not np.array_equal(
-                        baseline_balances, scenario_balances
-                    ):
-                        ax.plot(
-                            ages,
-                            scenario_balances,
-                            linewidth=1.5,
-                            color="#FF7F0E",
-                            marker="s",
-                            markersize=2,
-                        )
-                    ax.set_xlabel("Age", fontsize=8)
-                    ax.set_ylabel("Balance (£)", fontsize=8)
-                    ax.grid(True, alpha=0.2)
-                    ax.tick_params(labelsize=7)
-                    ax.yaxis.set_major_formatter(
-                        plt.FuncFormatter(
-                            lambda x, p: f"£{x/1e6:.1f}M"
-                            if x >= 1e6
-                            else f"£{x/1e3:.0f}K"
-                        )
-                    )
-                    fig.tight_layout()
-                    st.pyplot(fig, width='stretch')
+                            # Shrunk Monte Carlo distribution
+                            monte_carlo_paths = sim_result.get("monte_carlo_paths")
 
-                # Shrunk Monte Carlo distribution
-                monte_carlo_paths = sim_result.get("monte_carlo_paths")
+                            if monte_carlo_paths is not None and len(monte_carlo_paths) > 0:
+                                final_balances = monte_carlo_paths[:, -1]
+                                fig, ax = plt.subplots(figsize=(4, 2.5))
+                                ax.hist(final_balances, bins=20, color="#2CA02C", alpha=0.7, edgecolor="black")
+                                ax.axvline(np.median(final_balances), color="red", linestyle="--", linewidth=1)
+                                ax.set_xlabel("Final Balance (£)", fontsize=8)
+                                ax.set_ylabel("Sims", fontsize=8)
+                                ax.grid(True, alpha=0.2, axis="y")
+                                ax.tick_params(labelsize=7)
+                                ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"£{x/1e6:.1f}M" if x >= 1e6 else f"£{x/1e3:.0f}K"))
+                                fig.tight_layout()
+                                st.pyplot(fig, width='stretch')
 
-                if monte_carlo_paths is not None and len(monte_carlo_paths) > 0:
-                    final_balances = monte_carlo_paths[:, -1]
-
-                    fig, ax = plt.subplots(figsize=(4, 2.5))
-                    ax.hist(
-                        final_balances,
-                        bins=20,
-                        color="#2CA02C",
-                        alpha=0.7,
-                        edgecolor="black",
-                    )
-                    ax.axvline(
-                        np.median(final_balances),
-                        color="red",
-                        linestyle="--",
-                        linewidth=1,
-                    )
-                    ax.set_xlabel("Final Balance (£)", fontsize=8)
-                    ax.set_ylabel("Sims", fontsize=8)
-                    ax.grid(True, alpha=0.2, axis="y")
-                    ax.tick_params(labelsize=7)
-                    ax.xaxis.set_major_formatter(
-                        plt.FuncFormatter(
-                            lambda x, p: f"£{x/1e6:.1f}M"
-                            if x >= 1e6
-                            else f"£{x/1e3:.0f}K"
-                        )
-                    )
-                    fig.tight_layout()
-                    st.pyplot(fig, width='stretch')
-
-                st.divider()
+                            st.divider()
 
 
 @st.cache_data
