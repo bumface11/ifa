@@ -189,14 +189,16 @@ def _render_comparison_results(
         st.error("Failed to run simulations for comparison presets.")
         return
 
-    # Display results in columns
-    cols = st.columns(min(len(results), 3))  # Max 3 columns for readability
+    # Display results in tabs for easy comparison
+    preset_tabs = st.tabs(
+        [
+            preset_state.get("_preset_name", f"Preset {preset_num}")
+            for preset_num, preset_state, _ in results
+        ]
+    )
 
-    for col_idx, (preset_num, preset_state, sim_result) in enumerate(results):
-        with cols[col_idx % len(cols)]:
-            preset_name = preset_state.get("_preset_name", f"Preset {preset_num}")
-            st.markdown(f"### {preset_name}")
-
+    for tab, (preset_num, preset_state, sim_result) in zip(preset_tabs, results):
+        with tab:
             # Extract metrics from simulation result
             baseline_metrics = sim_result.get("baseline_metrics")
             scenario_metrics = sim_result.get("scenario_metrics")
@@ -221,7 +223,7 @@ def _render_comparison_results(
                 )
             else:
                 st.warning(
-                    f"Missing metrics for {preset_name}"
+                    f"Missing metrics for {preset_state.get('_preset_name', f'Preset {preset_num}')}"
                 )
 
 
