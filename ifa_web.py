@@ -221,8 +221,7 @@ def _render_comparison_results(
                 )
             else:
                 st.warning(
-                    f"Missing metrics: baseline={baseline_metrics}, "
-                    f"scenario={scenario_metrics}, monte_carlo={monte_carlo_metrics}"
+                    f"Missing metrics for {preset_name}"
                 )
 
 
