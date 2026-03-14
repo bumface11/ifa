@@ -190,6 +190,18 @@ def _render_comparison_results(
         st.error("Failed to run simulations for comparison presets.")
         return
 
+    # Set minimum column width for horizontal scrolling
+    st.markdown(
+        """
+        <style>
+        [data-testid="column"] {
+            min-width: 400px !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     # Display results in a scrollable grid (one column per preset)
     # Use container with horizontal scrolling
     with st.container():
@@ -226,6 +238,17 @@ def _render_comparison_results(
     # Display charts section
     st.markdown("### Balance Trajectories")
     
+    st.markdown(
+        """
+        <style>
+        [data-testid="column"] {
+            min-width: 400px !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     with st.container():
         cols = st.columns(len(results))
 
@@ -272,6 +295,17 @@ def _render_comparison_results(
     # Display Monte Carlo distribution
     st.markdown("### Monte Carlo Distribution (Final Balance)")
     
+    st.markdown(
+        """
+        <style>
+        [data-testid="column"] {
+            min-width: 400px !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     with st.container():
         cols = st.columns(len(results))
 
