@@ -190,20 +190,29 @@ def _render_comparison_results(
         st.error("Failed to run simulations for comparison presets.")
         return
 
-    # Set minimum column width for horizontal scrolling
+    # Add CSS to force minimum column widths and horizontal scrolling
     st.markdown(
         """
         <style>
+        /* Force columns to have minimum width and wrap to next row */
+        [data-testid="column"] > div > div {
+            min-width: 450px !important;
+            flex-basis: 450px !important;
+        }
+        /* Enable horizontal overflow for the column container */
         [data-testid="column"] {
-            min-width: 400px !important;
+            flex-shrink: 0 !important;
+        }
+        /* Streamlit's columns container */
+        [data-testid="stHorizontalBlock"] > div {
+            flex-wrap: nowrap !important;
+            overflow-x: auto !important;
         }
         </style>
         """,
         unsafe_allow_html=True,
     )
-
-    # Display results in a scrollable grid (one column per preset)
-    # Use container with horizontal scrolling
+    
     with st.container():
         cols = st.columns(len(results))
 
@@ -237,17 +246,6 @@ def _render_comparison_results(
 
     # Display charts section
     st.markdown("### Balance Trajectories")
-    
-    st.markdown(
-        """
-        <style>
-        [data-testid="column"] {
-            min-width: 400px !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
 
     with st.container():
         cols = st.columns(len(results))
@@ -294,17 +292,6 @@ def _render_comparison_results(
 
     # Display Monte Carlo distribution
     st.markdown("### Monte Carlo Distribution (Final Balance)")
-    
-    st.markdown(
-        """
-        <style>
-        [data-testid="column"] {
-            min-width: 400px !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
 
     with st.container():
         cols = st.columns(len(results))
