@@ -189,42 +189,38 @@ def _render_comparison_results(
         st.error("Failed to run simulations for comparison presets.")
         return
 
-    # Display results in tabs for easy comparison
-    preset_tabs = st.tabs(
-        [
-            preset_state.get("_preset_name", f"Preset {preset_num}")
-            for preset_num, preset_state, _ in results
-        ]
-    )
+    # Display results in a scrollable grid (one column per preset)
+    # Use container with horizontal scrolling
+    with st.container():
+        cols = st.columns(len(results))
 
-    for tab, (preset_num, preset_state, sim_result) in zip(preset_tabs, results):
-        with tab:
-            # Extract metrics from simulation result
-            baseline_metrics = sim_result.get("baseline_metrics")
-            scenario_metrics = sim_result.get("scenario_metrics")
-            monte_carlo_metrics = sim_result.get("monte_carlo_metrics")
+        for col, (preset_num, preset_state, sim_result) in zip(cols, results):
+            with col:
+                preset_name = preset_state.get("_preset_name", f"Preset {preset_num}")
+                st.markdown(f"### {preset_name}")
 
-            if baseline_metrics and scenario_metrics and monte_carlo_metrics:
-                col1, col2 = st.columns(2)
-                with col1:
+                # Extract metrics from simulation result
+                baseline_metrics = sim_result.get("baseline_metrics")
+                scenario_metrics = sim_result.get("scenario_metrics")
+                monte_carlo_metrics = sim_result.get("monte_carlo_metrics")
+
+                if baseline_metrics and scenario_metrics and monte_carlo_metrics:
                     st.metric(
                         "Baseline ending",
                         f"£{baseline_metrics.ending_balance:,.0f}",
                     )
-                with col2:
                     st.metric(
                         "Scenario ending",
                         f"£{scenario_metrics.ending_balance:,.0f}",
                     )
-
-                st.metric(
-                    "Ruin probability",
-                    f"{monte_carlo_metrics.ruin_probability * 100:.1f}%",
-                )
-            else:
-                st.warning(
-                    f"Missing metrics for {preset_state.get('_preset_name', f'Preset {preset_num}')}"
-                )
+                    st.metric(
+                        "Ruin probability",
+                        f"{monte_carlo_metrics.ruin_probability * 100:.1f}%",
+                    )
+                else:
+                    st.warning(
+                        f"Missing metrics for {preset_name}"
+                    )
 
 
 @st.cache_data
