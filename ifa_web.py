@@ -194,19 +194,28 @@ def _render_comparison_results(
     st.markdown(
         """
         <style>
-        /* Force columns to have minimum width and wrap to next row */
-        [data-testid="column"] > div > div {
-            min-width: 450px !important;
-            flex-basis: 450px !important;
-        }
-        /* Enable horizontal overflow for the column container */
+        /* Target the direct column wrapper divs created by st.columns() */
         [data-testid="column"] {
-            flex-shrink: 0 !important;
+            flex: 0 0 450px !important;
+            width: 450px !important;
+            min-width: 450px !important;
+            max-width: none !important;
         }
-        /* Streamlit's columns container */
-        [data-testid="stHorizontalBlock"] > div {
+        
+        /* Target inner content wrapper */
+        [data-testid="column"] > div {
+            width: 100% !important;
+        }
+        
+        /* Force the horizontal block to not wrap */
+        [data-testid="stHorizontalBlock"] {
             flex-wrap: nowrap !important;
             overflow-x: auto !important;
+        }
+        
+        /* Ensure parent doesn't constrain */
+        [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child {
+            margin-left: 0 !important;
         }
         </style>
         """,
