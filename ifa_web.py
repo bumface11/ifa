@@ -142,7 +142,7 @@ def _render_comparison_controls() -> None:
                 if st.button(
                     "Add Another Preset",
                     key="add_preset_button",
-                    use_container_width=True,
+                    use_column_width=True,
                 ):
                     # Paste a preset URL or code here
                     st.session_state["_show_add_preset_dialog"] = True
@@ -150,7 +150,7 @@ def _render_comparison_controls() -> None:
             if st.button(
                 "Clear Comparison",
                 key="clear_compare_button",
-                use_container_width=True,
+                use_column_width=True,
             ):
                 # Clear all comparison presets
                 for i in range(1, 6):
@@ -162,7 +162,7 @@ def _render_comparison_controls() -> None:
             if st.button(
                 "Start Comparison",
                 key="start_compare_button",
-                use_container_width=True,
+                use_column_width=True,
             ):
                 st.session_state["_show_add_preset_dialog"] = True
 
@@ -290,7 +290,7 @@ def _render_comparison_results(
                     ax.grid(True, alpha=0.3)
                     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"£{x/1e6:.1f}M" if x >= 1e6 else f"£{x/1e3:.0f}K"))
                     fig.tight_layout()
-                    st.pyplot(fig, use_container_width=True)
+                    st.pyplot(fig, width='stretch')
 
     # Display Monte Carlo distribution
     st.markdown("### Monte Carlo Distribution (Final Balance)")
@@ -340,7 +340,7 @@ def _render_comparison_results(
                     ax.grid(True, alpha=0.3, axis="y")
                     ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"£{x/1e6:.1f}M" if x >= 1e6 else f"£{x/1e3:.0f}K"))
                     fig.tight_layout()
-                    st.pyplot(fig, use_container_width=True)
+                    st.pyplot(fig, width='stretch')
 
 
 @st.cache_data
@@ -897,11 +897,11 @@ def main() -> None:
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Share Link", key="preset_share_button",
-                         use_container_width=True, help="Copy the current URL with your parameters"):
+                         use_column_width=True, help="Copy the current URL with your parameters"):
                 st.session_state["_show_share_url"] = True
         with col2:
             if st.button("Reset", key="preset_new_button",
-                         use_container_width=True, help="Reset to default parameters"):
+                         use_column_width=True, help="Reset to default parameters"):
                 st.session_state["_pending_preset_action"] = "new"
 
         # Show shareable URL when requested
