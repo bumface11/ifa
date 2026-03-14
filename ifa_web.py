@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 import streamlit as st
 
@@ -222,6 +223,91 @@ def _render_comparison_results(
                         f"Missing metrics for {preset_name}"
                     )
 
+    # Display charts section
+    st.markdown("### Balance Trajectories")
+    
+    with st.container():
+        cols = st.columns(len(results))
+
+        for col, (preset_num, preset_state, sim_result) in zip(cols, results):
+            with col:
+                preset_name = preset_state.get("_preset_name", f"Preset {preset_num}")
+                
+                # Extract chart data
+                ages = sim_result.get("ages")
+                baseline_balances = sim_result.get("baseline_balances")
+                scenario_balances = sim_result.get("scenario_balances")
+                
+                if ages is not None and baseline_balances is not None:
+                    # Plot baseline vs scenario
+                    fig, ax = plt.subplots(figsize=(6, 4))
+                    ax.plot(
+                        ages,
+                        baseline_balances,
+                        linewidth=2,
+                        color="#1F77B4",
+                        marker="o",
+                        markersize=3,
+                        label="Baseline",
+                    )
+                    if scenario_balances is not None and not np.array_equal(baseline_balances, scenario_balances):
+                        ax.plot(
+                            ages,
+                            scenario_balances,
+                            linewidth=2,
+                            color="#FF7F0E",
+                            marker="s",
+                            markersize=3,
+                            label="Scenario",
+                        )
+                    ax.set_xlabel("Age")
+                    ax.set_ylabel("Balance (£)")
+                    ax.set_title(f"{preset_name}")
+                    ax.legend(fontsize=8, loc="best")
+                    ax.grid(True, alpha=0.3)
+                    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"£{x/1e6:.1f}M" if x >= 1e6 else f"£{x/1e3:.0f}K"))
+                    fig.tight_layout()
+                    st.pyplot(fig, use_container_width=True)
+
+    # Display Monte Carlo distribution
+    st.markdown("### Monte Carlo Distribution (Final Balance)")
+    
+    with st.container():
+        cols = st.columns(len(results))
+
+        for col, (preset_num, preset_state, sim_result) in zip(cols, results):
+            with col:
+                preset_name = preset_state.get("_preset_name", f"Preset {preset_num}")
+                monte_carlo_paths = sim_result.get("monte_carlo_paths")
+                
+                if monte_carlo_paths is not None and len(monte_carlo_paths) > 0:
+                    # Get final balances from all Monte Carlo paths
+                    final_balances = monte_carlo_paths[:, -1]
+                    
+                    fig, ax = plt.subplots(figsize=(6, 4))
+                    ax.hist(
+                        final_balances,
+                        bins=30,
+                        color="#2CA02C",
+                        alpha=0.7,
+                        edgecolor="black",
+                    )
+                    ax.axvline(
+                        np.median(final_balances),
+                        color="red",
+                        linestyle="--",
+                        linewidth=2,
+                        label=f"Median: £{np.median(final_balances):,.0f}",
+                    )
+                    ax.set_xlabel("Final Balance (£)")
+                    ax.set_ylabel("Number of Simulations")
+                    ax.set_title(f"{preset_name}")
+                    ax.legend(fontsize=8)
+                    ax.grid(True, alpha=0.3, axis="y")
+                    ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"£{x/1e6:.1f}M" if x >= 1e6 else f"£{x/1e3:.0f}K"))
+                    fig.tight_layout()
+                    st.pyplot(fig, use_container_width=True)
+
 
 @st.cache_data
 def _run_preset_simulation(preset_num: int, preset_state: JsonMap) -> dict:
@@ -232,7 +318,7 @@ def _run_preset_simulation(preset_num: int, preset_state: JsonMap) -> dict:
         preset_state: Preset parameter state
 
     Returns:
-        Dictionary with simulation results (metrics, etc.)
+        Dictionary with simulation results (metrics, charts data, etc.)
     """
     try:
         # Extract parameters from preset
@@ -323,11 +409,19 @@ def _run_preset_simulation(preset_num: int, preset_state: JsonMap) -> dict:
 
         # For comparison, scenario = baseline
         scenario_metrics = baseline_metrics
+        scenario_balances = baseline_balances
 
         return {
             "baseline_metrics": baseline_metrics,
             "scenario_metrics": scenario_metrics,
             "monte_carlo_metrics": monte_carlo_metrics,
+            "ages": ages,
+            "baseline_balances": baseline_balances,
+            "scenario_balances": scenario_balances,
+            "monte_carlo_paths": monte_carlo_paths,
+            "db_pensions": db_pensions,
+            "baseline_spending": baseline_spending,
+            "baseline_required": baseline_required,
         }
 
     except Exception as e:
