@@ -23,7 +23,7 @@ def test_sanitize_preset_filename_handles_symbols_and_spaces() -> None:
 
 def test_save_and_load_preset_round_trip(tmp_path: Path) -> None:
     """Saved preset should round-trip name and sidebar state."""
-    sidebar_state = {
+    sidebar_state: dict[str, str | int | float | bool | None] = {
         "start_age_input": 55,
         "baseline_spending_input": 30_000.0,
         "dc_name_0": "Main Pot",

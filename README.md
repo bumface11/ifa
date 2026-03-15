@@ -106,6 +106,15 @@ pots and start ages.
   the new selection.
 - Editing `Preset name` and then clicking `Save` updates the selected preset
   and renames it in one step.
+- Saved-preset comparison workspace: choose up to three named presets and view
+  them either side by side or one at a time.
+- `Compare saved presets` is a separate display mode, and in that mode the app
+  shows only saved preset outputs rather than the current unsaved sidebar
+  inputs.
+- The focused comparison mode is intended for smaller screens where full
+  side-by-side panels would be too cramped.
+- The last run stays visible while you switch comparison layout or choose which
+  preset to focus on.
 - Editable name fields for each DC pot and each life event, with sensible
   default names.
 - Editable name fields for each DB pension stream, with sensible defaults.
