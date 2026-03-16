@@ -9,6 +9,7 @@ from ifa.presets import save_preset
 from ifa_web import (
     _build_simulation_inputs_from_state,
     _capture_comparison_snapshots,
+    _needs_recalculation,
     _sanitize_compare_preset_selection,
 )
 
@@ -115,3 +116,30 @@ def test_sanitize_compare_preset_selection_filters_missing_and_duplicate() -> No
 def test_sanitize_compare_preset_selection_handles_non_list() -> None:
     """Unexpected session-state types should degrade to an empty selection."""
     assert _sanitize_compare_preset_selection("Alpha", ["Alpha"]) == []
+
+
+def test_needs_recalculation_on_sidebar_change() -> None:
+    """Editing any tracked input should require a fresh run."""
+    current_state = {"baseline_spending_input": 31_000.0}
+    last_run_state = {"baseline_spending_input": 30_000.0}
+
+    assert _needs_recalculation(
+        current_state=current_state,
+        last_run_state=last_run_state,
+        display_mode="Current inputs",
+        selected_compare_presets=[],
+        last_run_compare_selection=[],
+    )
+
+
+def test_needs_recalculation_on_compare_selection_change() -> None:
+    """Changing selected comparison presets should require rerun in compare mode."""
+    shared_state = {"baseline_spending_input": 30_000.0}
+
+    assert _needs_recalculation(
+        current_state=shared_state,
+        last_run_state=shared_state,
+        display_mode="Compare saved presets",
+        selected_compare_presets=["Alpha", "Beta"],
+        last_run_compare_selection=["Alpha"],
+    )

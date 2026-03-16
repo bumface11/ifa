@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "name": "Couple cashflow Ed1",
-  "saved_at": "2026-03-16T21:40:04.610115+00:00",
+  "name": "Ed1a",
+  "saved_at": "2026-03-16T21:37:51.665041+00:00",
   "sidebar_state": {
     "model_start_age_input": 51,
     "drawdown_start_age_input": 58,
@@ -10,7 +10,7 @@
     "baseline_spending_input": 40000.0,
     "mean_return_input": 0.045,
     "std_return_input": 0.1,
-    "random_seed_input": 42,
+    "random_seed_input": 41,
     "num_simulations_input": 1000,
     "save_outputs_input": false,
     "dc_pot_count": 2,

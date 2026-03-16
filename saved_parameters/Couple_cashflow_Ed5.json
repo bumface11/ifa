@@ -1,7 +1,7 @@
 {
   "version": 1,
   "name": "Couple cashflow Ed5",
-  "saved_at": "2026-03-16T18:01:38.948248+00:00",
+  "saved_at": "2026-03-16T18:43:59.629389+00:00",
   "sidebar_state": {
     "model_start_age_input": 51,
     "drawdown_start_age_input": 55,
@@ -36,12 +36,12 @@
     "db_age_3": 68,
     "db_amount_3": 11900.0,
     "lump_name_0": "Property",
-    "lump_age_0": 57,
+    "lump_age_0": 55,
     "lump_amount_0": 200000.0,
     "step_name_0": "Spending Step 1",
-    "step_start_0": 57,
+    "step_start_0": 55,
     "step_amount_0": 10000.0,
     "step_has_end_0": true,
-    "step_end_0": 67
+    "step_end_0": 70
   }
 }

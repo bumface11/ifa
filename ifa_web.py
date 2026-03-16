@@ -918,6 +918,29 @@ def _capture_comparison_snapshots(
     return snapshots
 
 
+def _needs_recalculation(
+    *,
+    current_state: Mapping[str, StateValue],
+    last_run_state: object,
+    display_mode: str,
+    selected_compare_presets: Sequence[str],
+    last_run_compare_selection: object,
+) -> bool:
+    """Return True when sidebar edits require a fresh simulation run."""
+    if not isinstance(last_run_state, dict):
+        return False
+    if dict(current_state) != last_run_state:
+        return True
+    if display_mode != "Compare saved presets":
+        return False
+    if not isinstance(last_run_compare_selection, list):
+        return len(selected_compare_presets) > 0
+    normalized_last = [
+        value for value in last_run_compare_selection if isinstance(value, str)
+    ]
+    return list(selected_compare_presets) != normalized_last
+
+
 def _run_simulation_panel(
     inputs: SimulationInputs,
     *,
@@ -1611,22 +1634,33 @@ def main() -> None:
 
     if run_model:
         st.session_state["_last_run_current_state"] = _collect_sidebar_state()
-        st.session_state["_last_run_comparison_snapshots"] = (
-            _capture_comparison_snapshots(
-                selected_compare_presets,
-                preset_map,
-            )
-        )
+        st.session_state["_last_run_compare_selection"] = list(selected_compare_presets)
         st.session_state["_last_run_save_outputs"] = save_outputs
 
+    current_state = _collect_sidebar_state()
     last_run_state = st.session_state.get("_last_run_current_state")
     if not isinstance(last_run_state, dict):
         st.info("Set assumptions in the sidebar, then click Run simulation.")
         return
 
-    comparison_snapshots = st.session_state.get("_last_run_comparison_snapshots", [])
-    if not isinstance(comparison_snapshots, list):
-        comparison_snapshots = []
+    if not run_model and _needs_recalculation(
+        current_state=current_state,
+        last_run_state=last_run_state,
+        display_mode=display_mode,
+        selected_compare_presets=selected_compare_presets,
+        last_run_compare_selection=st.session_state.get("_last_run_compare_selection"),
+    ):
+        st.warning("Inputs changed since the last run. Click Run simulation.")
+        return
+
+    last_run_compare_selection = _sanitize_compare_preset_selection(
+        st.session_state.get("_last_run_compare_selection", []),
+        list(preset_map.keys()),
+    )
+    comparison_snapshots = _capture_comparison_snapshots(
+        last_run_compare_selection,
+        preset_map,
+    )
     save_outputs_for_run = bool(st.session_state.get("_last_run_save_outputs", False))
 
     output_dir = Path("output")
@@ -1635,33 +1669,39 @@ def main() -> None:
 
     if display_mode == "Compare saved presets":
         st.markdown("## Saved Preset Comparison")
-        comparison_results = [
-            _run_simulation_panel(
-                _build_simulation_inputs_from_state(saved_state, label=label),
-                save_outputs=save_outputs_for_run,
-                output_dir=output_dir,
-            )
-            for label, saved_state in comparison_snapshots
-        ]
-        if len(comparison_results) == 0:
-            st.info(
-                "Choose one or more saved presets in the sidebar, then click "
-                "Run simulation to enter comparison mode."
-            )
-            return
+        comparison_results: list[SimulationResults] = []
         try:
+            for label, saved_state in comparison_snapshots:
+                comparison_results.append(
+                    _run_simulation_panel(
+                        _build_simulation_inputs_from_state(saved_state, label=label),
+                        save_outputs=save_outputs_for_run,
+                        output_dir=output_dir,
+                    )
+                )
+            if len(comparison_results) == 0:
+                st.info(
+                    "Choose one or more saved presets in the sidebar, then click "
+                    "Run simulation to enter comparison mode."
+                )
+                return
             _render_comparison_workspace(comparison_results, comparison_layout)
         finally:
             for result in comparison_results:
                 _close_simulation_figures(result)
         return
 
-    current_results = _run_simulation_panel(
-        _build_simulation_inputs_from_state(last_run_state, label="Current inputs"),
-        save_outputs=save_outputs_for_run,
-        output_dir=output_dir,
-    )
-    _render_simulation_results(current_results)
+    current_results: SimulationResults | None = None
+    try:
+        current_results = _run_simulation_panel(
+            _build_simulation_inputs_from_state(last_run_state, label="Current inputs"),
+            save_outputs=save_outputs_for_run,
+            output_dir=output_dir,
+        )
+        _render_simulation_results(current_results)
+    finally:
+        if current_results is not None:
+            _close_simulation_figures(current_results)
 
 
 if __name__ == "__main__":
