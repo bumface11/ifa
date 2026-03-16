@@ -32,7 +32,7 @@ Run the Streamlit dashboard:
 streamlit run ifa_web.py
 ```
 
-Run the chat-driven interface:
+Run the new conversational chat UI:
 
 ```bash
 streamlit run ifa_chat.py
@@ -48,6 +48,21 @@ uv run python pension_drawdown_simulator.py
 uv run streamlit run ifa_web.py
 uv run streamlit run ifa_chat.py
 ```
+
+## Chat Interface
+
+`ifa_chat.py` provides a conversational "what if" interface alongside the original
+dashboard.  Ask natural-language questions and see inline charts in response:
+
+- *"I'm 55 with a £300k DC pot and £50k tax-free. DB pension £8k/year from 66."*
+- *"What if I need £18,000 for a new roof at age 70?"*
+- *"What if care costs start at £6,000/year from age 80?"*
+- *"Which pot runs out first?"*
+- *"What happens if markets crash early?"*
+
+Type `run` to run the simulation, `help` to see all understood phrases, or
+`reset` to start over.  The original parameter-driven dashboard (`ifa_web.py`)
+remains available for fine-grained control.
 
 ## Documentation
 

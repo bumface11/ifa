@@ -37,35 +37,31 @@ In the web app:
 - Click `Run simulation` to refresh metrics, explanations, and charts.
 - Optionally enable PNG saving in the sidebar.
 
-## 3) Chat Interface
+## 3) Chat UI Version
 
-Use this for a conversational "what if" experience where you type questions
-and the app updates the scenario, runs the simulation, and renders the
-relevant charts inline.
+Use this when you want to explore scenarios through natural-language "what if"
+questions with inline chart responses.
 
 ```bash
 uv run streamlit run ifa_chat.py
 ```
 
-Example questions:
+In the chat app:
 
-- *"I'm 55"* — set your current age
-- *"Retire at 60"* — change DC pot drawdown start age
-- *"DC pot £300,000"* — update your pension pot balance
-- *"DB pension £8,000/year from age 66"* — add a defined-benefit stream
-- *"House repairs £18,000 at age 70"* — add a one-off spending event
-- *"Care costs £6,000/year from age 80"* — add an ongoing spending step
-- *"Run it"* / *"Show me"* — simulate and display charts with explanation
-- *"Show me which pot drains first"* — pot breakdown view
-- *"What if markets crash early?"* — sequence-of-returns chart
-- *"How worried should I be?"* — Monte Carlo fan chart
-- *"Show my assumptions"* — summarise current scenario
-- *"Start over"* — reset to defaults
+- Describe your retirement situation in plain English, e.g.:
+  - *"I'm 55 with a £300k DC pot and £50k tax-free."*
+  - *"DB pension of £8,000/year from age 66."*
+  - *"I spend about £22,000 a year."*
+- Type **run** to run the simulation and see the main charts inline.
+- Ask **"what if"** questions to add life events:
+  - *"What if I need £18,000 for a roof at age 70?"*
+  - *"What if care costs start at £6,000/year from age 80?"*
+- Request specific views: *"Which pot runs out first?"*,
+  *"What about risk?"*, *"Sequence of returns"*, *"Show everything"*.
+- Type **help** to see the full list of understood phrases.
+- Type **reset** to start over with default parameters.
 
-The chat interface uses the same `ifa/` engine, events, metrics, explain,
-and plotting modules as the dashboard — only the UI layer is different.
 
-## Concept Notes
 
 - Baseline scenario: spending plan with no added life events.
 - Life-events scenario: baseline plus one-off or ongoing extra spending.

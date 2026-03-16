@@ -1,14 +1,19 @@
-"""Streamlit chat-driven interface for exploring retirement scenarios."""
+"""Streamlit chat-based pension drawdown simulator.
+
+Provides a conversational "what if" interface on top of the ifa simulation
+engine.  Run with::
+
+    streamlit run ifa_chat.py
+"""
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
-from typing import Literal
+from contextlib import suppress
+from typing import Any
 
 import numpy as np
 import streamlit as st
-from matplotlib.figure import Figure
 
 from ifa.config import (
     DB_PENSIONS,
@@ -22,13 +27,11 @@ from ifa.config import (
     STD_RETURN,
 )
 from ifa.engine import (
-    calculate_db_pension_income,
     run_monte_carlo_simulation,
     simulate_multi_pot_pension_path,
 )
 from ifa.events import build_required_withdrawals, build_spending_drawdown_schedule
 from ifa.explain import build_plain_english_explanation
-from ifa.market import generate_random_returns
 from ifa.metrics import summarize_monte_carlo, summarize_path
 from ifa.models import LumpSumEvent, SpendingStepEvent
 from ifa.plotting import (
@@ -40,1045 +43,1514 @@ from ifa.plotting import (
 )
 from ifa.strategies import create_fixed_real_drawdown_strategy
 
-_WELCOME_MESSAGE = """
-Welcome! I can help you explore your retirement finances interactively.
+# ── Constants ─────────────────────────────────────────────────────────────────
 
-Try asking questions like:
+_DEFAULT_SPENDING: float = 30_000.0
 
-- *"I'm 55"* — set your current age
-- *"Retire at 60"* — change DC pot drawdown start age
-- *"End age 90"* — set the projection end age
-- *"Spending £25,000/year"* — set baseline annual spending
-- *"DC pot £300,000"* — update your DC pension pot balance
-- *"Tax-free pot £50,000"* — update your tax-free savings
-- *"DB pension £8,000/year from age 66"* — add a defined-benefit pension
-- *"House repairs £18,000 at age 70"* — add a one-off spending event
-- *"Care costs £6,000/year from age 80"* — add an ongoing spending step
-- *"Run it"* / *"Show me"* — run the simulation with charts
-- *"Show me which pot drains first"* — pot breakdown charts
-- *"What if markets crash early?"* — sequence-of-returns chart
-- *"How worried should I be?"* — Monte Carlo probability fan chart
-- *"Compare"* / *"What changed?"* — baseline vs scenario comparison
-- *"Show my assumptions"* — summarise your current scenario setup
-- *"Start over"* — reset everything to defaults
+_CHART_COMPARISON = "comparison"
+_CHART_FAN = "fan"
+_CHART_SEQUENCE = "sequence"
+_CHART_STACKED = "stacked"
+_CHART_INDIVIDUAL = "individual"
 
-What would you like to explore?
+_WELCOME_TEXT = """\
+**Welcome to the IFA Pension Drawdown Chat**
+
+I help you explore "what if" retirement finance questions through conversation.
+Describe your situation and I'll run simulations and show you the charts.
+
+**Try asking things like:**
+- *"I'm 55 with a £300k DC pot and £50k tax-free. DB pension £8k/year from 66."*
+- *"I spend about £22,000 a year."*
+- *"Run simulation"*
+- *"What if I need £18,000 for a new roof at age 70?"*
+- *"What if care costs start at £6,000/year from age 80?"*
+- *"Which pot runs out first?"*
+- *"What happens if markets crash early?"*
+- *"What if I retire at 60 instead?"*
+
+Or type **"run it"** to explore the default scenario right away. \
+Type **"help"** for a full list of things I understand.
 """
 
-_DEFAULT_SPENDING = 30_000.0
+_HELP_TEXT = """\
+**Things I understand:**
 
-ChartType = Literal[
-    "baseline_vs_scenario",
-    "sequence_of_returns",
-    "monte_carlo",
-    "pots_stacked",
-    "pots_individual",
-]
+**Setting up your situation:**
+- *"I'm [age]"* or *"start age [age]"* — set starting age
+- *"DC pot £[amount]"* or *"£[amount] DC pot"* — set primary DC pot balance
+- *"Tax-free pot £[amount]"* — set tax-free pot balance
+- *"DB pension £[amount]/year from age [age]"* — add (or replace) a DB pension
+- *"I spend £[amount]/year"* or *"baseline spending £[amount]"* — set baseline
+- *"Retire at [age]"* — update start age
+- *"End age [age]"* or *"plan to age [age]"* — set end age
 
+**Adding life events (these re-run the simulation automatically):**
+- *"What if I need £[amount] at age [age]?"* — one-off lump sum cost
+- *"What if care costs £[amount]/year from age [age]?"* — ongoing spending step
+- *"What if costs £[amount]/year from [age] to [age]?"* — bounded spending step
 
-@dataclass
-class ChatScenario:
-    """Holds the current retirement scenario being explored in the chat.
+**Running and viewing:**
+- *"Run"* / *"Go"* / *"Simulate"* / *"Show results"* — run and show main charts
+- *"Which pot runs out first?"* / *"Show pots"* — individual pot breakdown
+- *"What about risk?"* / *"Monte Carlo"* — fan chart with ruin probability
+- *"Sequence of returns"* / *"Market crash"* — sequence-of-returns teaching chart
+- *"Show everything"* / *"All charts"* — show all 5 charts
+- *"Baseline vs scenario"* — comparison chart only
 
-    Attributes:
-        start_age: Current age / simulation start age.
-        end_age: Projection end age.
-        tax_free_pot: Tax-free savings pot balance (ISAs, Premium Bonds, etc.).
-        dc_pots: DC pension pots as ``(drawdown_start_age, balance)`` pairs.
-        db_pensions: Defined-benefit pensions as ``(start_age, annual_amount)``.
-        baseline_spending: Annual baseline spending in real terms.
-        life_events: Accumulated life events (lump sums and spending steps).
-        mean_return: Mean annual market return assumption.
-        std_return: Annual return standard deviation.
-        random_seed: RNG seed for reproducible simulations.
-        num_simulations: Number of Monte Carlo paths.
-    """
+**Market settings:**
+- *"Mean return 5%"* or *"5% returns"* — adjust mean real return
+- *"Volatility 12%"* — adjust return volatility
+- *"1000 simulations"* — set Monte Carlo path count
 
-    start_age: int = START_AGE
-    end_age: int = END_AGE
-    tax_free_pot: float = INITIAL_TAX_FREE_POT
-    dc_pots: list[tuple[int, float]] = field(
-        default_factory=lambda: list(DC_POTS)
-    )
-    db_pensions: list[tuple[int, float]] = field(
-        default_factory=lambda: list(DB_PENSIONS)
-    )
-    baseline_spending: float = _DEFAULT_SPENDING
-    life_events: list[LumpSumEvent | SpendingStepEvent] = field(
-        default_factory=list
-    )
-    mean_return: float = MEAN_RETURN
-    std_return: float = STD_RETURN
-    random_seed: int = RANDOM_SEED
-    num_simulations: int = NUM_SIMULATIONS
+**Other:**
+- *"Reset"* / *"Start over"* — reset everything to defaults
+- *"Help"* — show this message
+"""
 
+# ── Amount / age parsing helpers ──────────────────────────────────────────────
 
-@dataclass
-class ParsedIntent:
-    """Structured result of parsing one user message.
+# Regex fragment that matches an optional £, digits, commas, optional decimal,
+# and an optional k/m multiplier.
+_AMT = r"£?([\d,]+(?:\.\d+)?)\s*([km]?)\b"
 
-    Attributes:
-        reply: Immediate text reply to display in the chat.
-        updates: Dict of scenario attribute updates to apply.
-        chart_types: Which chart types to render (empty means no charts).
-        run_simulation: Whether to run and display simulation results.
-        reset: Whether to reset the scenario to defaults.
-        show_setup: Whether to display the current scenario summary.
-    """
+# Minimum amount (£) for a lump sum event — filters out age-like numbers.
+_MIN_LUMP_AMOUNT: float = 500.0
 
-    reply: str
-    updates: dict = field(default_factory=dict)
-    chart_types: list[ChartType] = field(default_factory=list)
-    run_simulation: bool = False
-    reset: bool = False
-    show_setup: bool = False
+# Characters to look back before a spend-event match to check for pension
+# context keywords that would indicate the amount is a DB pension, not a cost.
+_PENSION_CONTEXT_LOOKBACK: int = 40
 
 
-# ---------------------------------------------------------------------------
-# Amount / age extraction helpers
-# ---------------------------------------------------------------------------
-
-
-def _parse_amount(text: str) -> float | None:
-    """Extract a monetary amount from text.
-
-    Handles £ prefix and k/K/m/M suffix abbreviations.
+def _parse_amount(digits: str, suffix: str) -> float:
+    """Convert raw digit string and optional k/m suffix to a float.
 
     Args:
-        text: Raw text fragment potentially containing a monetary amount.
+        digits: Digit string, possibly with commas (e.g. ``"300,000"``).
+        suffix: One of ``""`` / ``"k"`` / ``"K"`` / ``"m"`` / ``"M"``.
 
     Returns:
-        Parsed float value, or ``None`` if no amount is found.
+        Numeric value as float.
     """
-    match = re.search(r"£\s*([\d,]+(?:\.\d+)?)\s*([kKmM])?", text)
-    if not match:
-        match = re.search(r"\b([\d,]+(?:\.\d+)?)\s*([kKmM])?\b", text)
-    if not match:
+    val = float(digits.replace(",", ""))
+    mul = {"k": 1_000.0, "m": 1_000_000.0}.get(suffix.lower(), 1.0)
+    return val * mul
+
+
+def _find_amount(text: str) -> float | None:
+    """Return the first currency-style amount found in *text*.
+
+    Args:
+        text: Source text.
+
+    Returns:
+        First amount as float, or ``None`` if none found.
+    """
+    m = re.search(_AMT, text, re.IGNORECASE)
+    if not m:
         return None
-    raw = match.group(1).replace(",", "")
-    value = float(raw)
-    suffix = (match.group(2) or "").lower()
-    if suffix == "k":
-        value *= 1_000.0
-    elif suffix == "m":
-        value *= 1_000_000.0
-    return value
+    try:
+        return _parse_amount(m.group(1), m.group(2))
+    except ValueError:
+        return None
 
 
-# ---------------------------------------------------------------------------
-# Intent parsing
-# ---------------------------------------------------------------------------
+def _find_amounts(text: str) -> list[float]:
+    """Return all currency-style amounts found in *text*.
+
+    Args:
+        text: Source text.
+
+    Returns:
+        List of amounts in order of appearance.
+    """
+    results: list[float] = []
+    for m in re.finditer(_AMT, text, re.IGNORECASE):
+        with suppress(ValueError):
+            results.append(_parse_amount(m.group(1), m.group(2)))
+    return results
 
 
-def _parse_intent(text: str, scenario: ChatScenario) -> ParsedIntent:  # noqa: C901
-    """Parse a user message into a structured intent.
+# ── Parameter extraction from free text ───────────────────────────────────────
 
-    Uses rule-based regex matching — no external LLM is required.
+
+def _extract_start_age(text: str) -> int | None:
+    """Extract a starting / retirement age from *text*.
+
+    Args:
+        text: User message text.
+
+    Returns:
+        Start age as int, or ``None`` if not detected.
+    """
+    patterns = [
+        r"i(?:'m|'m| am)\s+(\d{2})\b",
+        r"i(?:'m|'m| am)\s+currently\s+(\d{2})\b",
+        r"start(?:ing)?\s+age\s+(\d{2,3})\b",
+        r"start(?:ing)?\s+at\s+(\d{2,3})\b",
+        r"retire(?:\s+at)?\s+(?:age\s+)?(\d{2,3})\b",
+        r"retirement\s+at\s+(?:age\s+)?(\d{2,3})\b",
+        r"from\s+age\s+(\d{2,3})\s+(?:onwards?|to\s+\d)",
+    ]
+    for pat in patterns:
+        m = re.search(pat, text, re.IGNORECASE)
+        if m:
+            age = int(m.group(1))
+            if 40 <= age <= 85:
+                return age
+    return None
+
+
+def _extract_end_age(text: str) -> int | None:
+    """Extract an end / planning age from *text*.
+
+    Args:
+        text: User message text.
+
+    Returns:
+        End age as int, or ``None`` if not detected.
+    """
+    patterns = [
+        r"end\s+age\s+(\d{2,3})\b",
+        r"(?:plan|simulate|model)\s+to\s+age\s+(\d{2,3})\b",
+        r"until\s+(?:age\s+)?(\d{2,3})\b",
+        r"to\s+age\s+(\d{2,3})\b",
+        r"age\s+(\d{2,3})\s+(?:model|plan)",
+    ]
+    for pat in patterns:
+        m = re.search(pat, text, re.IGNORECASE)
+        if m:
+            age = int(m.group(1))
+            if 60 <= age <= 110:
+                return age
+    return None
+
+
+def _extract_tax_free_pot(text: str) -> float | None:
+    """Extract tax-free pot balance from *text*.
+
+    Args:
+        text: User message text.
+
+    Returns:
+        Balance as float, or ``None`` if not detected.
+    """
+    # "£50k tax-free [pot]"
+    m = re.search(
+        _AMT + r"\s+tax[\s\-]?free(?:\s+pot)?",
+        text,
+        re.IGNORECASE,
+    )
+    if m:
+        try:
+            return _parse_amount(m.group(1), m.group(2))
+        except ValueError:
+            pass
+    # "tax-free pot [of] £50k"
+    m = re.search(
+        r"tax[\s\-]?free\s+(?:pot\s+)?(?:of\s+)?" + _AMT,
+        text,
+        re.IGNORECASE,
+    )
+    if m:
+        try:
+            return _parse_amount(m.group(1), m.group(2))
+        except ValueError:
+            pass
+    return None
+
+
+def _extract_dc_pot(text: str) -> float | None:
+    """Extract primary DC pot balance from *text*.
+
+    Args:
+        text: User message text.
+
+    Returns:
+        Balance as float, or ``None`` if not detected.
+    """
+    # "£300k DC pot" / "£300k pension pot"
+    m = re.search(
+        _AMT + r"\s+(?:dc|pension)\s+pot",
+        text,
+        re.IGNORECASE,
+    )
+    if m:
+        try:
+            return _parse_amount(m.group(1), m.group(2))
+        except ValueError:
+            pass
+    # "DC pot [of] £300k" / "pension pot of £300k"
+    m = re.search(
+        r"(?:dc|pension)\s+pot\s+(?:of\s+)?" + _AMT,
+        text,
+        re.IGNORECASE,
+    )
+    if m:
+        try:
+            return _parse_amount(m.group(1), m.group(2))
+        except ValueError:
+            pass
+    # "invested pot of £300k" / "£300k in a DC pot"
+    m = re.search(
+        _AMT + r"\s+in\s+(?:a\s+)?(?:dc|pension)\s+pot",
+        text,
+        re.IGNORECASE,
+    )
+    if m:
+        try:
+            return _parse_amount(m.group(1), m.group(2))
+        except ValueError:
+            pass
+    return None
+
+
+def _extract_baseline_spending(text: str) -> float | None:
+    """Extract baseline annual spending from *text*.
+
+    Args:
+        text: User message text.
+
+    Returns:
+        Annual spending as float, or ``None`` if not detected.
+    """
+    # "I spend [about] £22,000 [a year / per year / /year]"
+    m = re.search(
+        r"(?:i\s+)?spend\s+(?:about\s+|roughly\s+|around\s+)?" + _AMT
+        + r"(?:\s+(?:a|per)\s+year|\s*\/year)?",
+        text,
+        re.IGNORECASE,
+    )
+    if m:
+        try:
+            return _parse_amount(m.group(1), m.group(2))
+        except ValueError:
+            pass
+    # "baseline [annual] spending [of] £22k"
+    m = re.search(
+        r"baseline\s+(?:annual\s+)?spending\s+(?:of\s+)?" + _AMT,
+        text,
+        re.IGNORECASE,
+    )
+    if m:
+        try:
+            return _parse_amount(m.group(1), m.group(2))
+        except ValueError:
+            pass
+    # "spending of £22k" / "budget £22k"
+    m = re.search(
+        r"(?:annual\s+)?(?:spending|budget)\s+(?:of\s+)?" + _AMT,
+        text,
+        re.IGNORECASE,
+    )
+    if m:
+        try:
+            return _parse_amount(m.group(1), m.group(2))
+        except ValueError:
+            pass
+    return None
+
+
+def _extract_db_pensions(text: str) -> list[tuple[int, float]]:
+    """Extract DB pension streams (start_age, annual_amount) from *text*.
+
+    Args:
+        text: User message text.
+
+    Returns:
+        List of ``(start_age, annual_amount)`` tuples.
+    """
+    results: list[tuple[int, float]] = []
+    # Match "DB pension [is/of] £8k/year from [age] 66" and variants.
+    # Allow arbitrary words (is, was, of, pays, =, etc.) between keyword and amount.
+    pension_phrases = [
+        r"(?:db|defined[\s\-]benefit|final[\s\-]salary)\s+pension",
+        r"pension\s+income",
+        r"pension\s+of",
+    ]
+    for phrase in pension_phrases:
+        for m in re.finditer(
+            phrase
+            + r"(?:\s+\w+){0,3}?\s*"  # allow up to 3 words (e.g. "is", "of")
+            + _AMT
+            + r"(?:\s*(?:/year|a\s+year|per\s+year|annually|p\.?a\.?))?"
+            + r"\s+(?:from\s+)?(?:age\s+)?(\d{2,3})\b",
+            text,
+            re.IGNORECASE,
+        ):
+            try:
+                amount = _parse_amount(m.group(1), m.group(2))
+                age = int(m.group(3))
+                if 50 <= age <= 90 and amount > 0:
+                    results.append((age, amount))
+            except (ValueError, IndexError):
+                pass
+
+    return results
+
+
+def _extract_lump_events(
+    text: str, start_age: int, end_age: int
+) -> list[LumpSumEvent]:
+    """Extract one-off lump sum events from *text*.
+
+    Args:
+        text: User message text.
+        start_age: Scenario start age (for range validation).
+        end_age: Scenario end age (for range validation).
+
+    Returns:
+        List of :class:`~ifa.models.LumpSumEvent` objects.
+    """
+    results: list[LumpSumEvent] = []
+
+    # "need/cost/pay/spend £18,000 [for X] at [age] 70"
+    for m in re.finditer(
+        r"(?:need|cost|pay|spend)\s+(?:a\s+)?"
+        + _AMT
+        + r"(?:\s+for\s+[^.?\n,]+?)?"
+        + r"\s+at\s+(?:age\s+)?(\d{2,3})\b",
+        text,
+        re.IGNORECASE,
+    ):
+        try:
+            amount = _parse_amount(m.group(1), m.group(2))
+            age = int(m.group(3))
+            if start_age <= age <= end_age and amount > 0:
+                results.append(LumpSumEvent(age=age, amount=amount))
+        except (ValueError, IndexError):
+            pass
+
+    # "£18,000 [for X] at [age] 70" (without need/cost/pay prefix)
+    for m in re.finditer(
+        _AMT
+        + r"(?:\s+for\s+[^.?\n,]+?)?"
+        + r"\s+at\s+(?:age\s+)?(\d{2,3})\b",
+        text,
+        re.IGNORECASE,
+    ):
+        try:
+            amount = _parse_amount(m.group(1), m.group(2))
+            age = int(m.group(3))
+            if start_age <= age <= end_age and amount > _MIN_LUMP_AMOUNT:
+                event = LumpSumEvent(age=age, amount=amount)
+                if event not in results:
+                    results.append(event)
+        except (ValueError, IndexError):
+            pass
+
+    return results
+
+
+def _extract_spend_events(
+    text: str, start_age: int, end_age: int
+) -> list[SpendingStepEvent]:
+    """Extract ongoing spending step events from *text*.
+
+    Args:
+        text: User message text.
+        start_age: Scenario start age (for range validation).
+        end_age: Scenario end age (for range validation).
+
+    Returns:
+        List of :class:`~ifa.models.SpendingStepEvent` objects.
+    """
+    results: list[SpendingStepEvent] = []
+    per_year_suffix = r"(?:\s*(?:/year|a\s+year|per\s+year|annually|p\.?a\.?))?"
+    # Keywords that indicate the amount is a DB pension, not a spending step.
+    _pension_ctx = re.compile(
+        r"(?:db|defined[\s\-]benefit|final[\s\-]salary|pension)\b",
+        re.IGNORECASE,
+    )
+
+    # "£6,000/year from [age] 80 [to [age] 90]"
+    for m in re.finditer(
+        _AMT
+        + per_year_suffix
+        + r"\s+from\s+(?:age\s+)?(\d{2,3})\b"
+        + r"(?:\s+to\s+(?:age\s+)?(\d{2,3})\b)?",
+        text,
+        re.IGNORECASE,
+    ):
+        # Skip if within 40 chars before the match there's a pension keyword.
+        preceding = text[max(0, m.start() - _PENSION_CONTEXT_LOOKBACK) : m.start()]
+        if _pension_ctx.search(preceding):
+            continue
+        try:
+            amount = _parse_amount(m.group(1), m.group(2))
+            s_age = int(m.group(3))
+            e_age = int(m.group(4)) if m.group(4) else None
+            if start_age <= s_age <= end_age and amount > 0:
+                if e_age is not None and not (s_age <= e_age <= end_age):
+                    e_age = None
+                results.append(
+                    SpendingStepEvent(
+                        start_age=s_age,
+                        extra_per_year=amount,
+                        end_age=e_age,
+                    )
+                )
+        except (ValueError, IndexError):
+            pass
+
+    return results
+
+
+def _extract_market_params(text: str) -> dict[str, Any]:
+    """Extract market settings from *text*.
+
+    Args:
+        text: User message text.
+
+    Returns:
+        Dict with any of: ``mean_return``, ``std_return``, ``num_simulations``.
+    """
+    updates: dict[str, Any] = {}
+
+    # "mean return [of] X%" or "X% [mean] return"
+    m = re.search(r"(\d+(?:\.\d+)?)\s*%\s+(?:mean\s+)?returns?", text, re.IGNORECASE)
+    if not m:
+        m = re.search(
+            r"(?:mean\s+)?returns?\s+(?:of\s+)?(\d+(?:\.\d+)?)\s*%",
+            text,
+            re.IGNORECASE,
+        )
+    if m:
+        updates["mean_return"] = float(m.group(1)) / 100.0
+
+    # "volatility [of] X%"
+    m = re.search(
+        r"volatility\s+(?:of\s+)?(\d+(?:\.\d+)?)\s*%",
+        text,
+        re.IGNORECASE,
+    )
+    if not m:
+        m = re.search(r"(\d+(?:\.\d+)?)\s*%\s+volatility", text, re.IGNORECASE)
+    if m:
+        updates["std_return"] = float(m.group(1)) / 100.0
+
+    # "X simulations" / "X paths"
+    m = re.search(r"(\d{3,5})\s+(?:simulations?|paths?|runs?)\b", text, re.IGNORECASE)
+    if m:
+        updates["num_simulations"] = int(m.group(1))
+
+    return updates
+
+
+# ── Intent detection ───────────────────────────────────────────────────────────
+
+
+def _any(text: str, *patterns: str) -> bool:
+    """Return True if any of the regex patterns match *text* case-insensitively.
+
+    Args:
+        text: Source text.
+        *patterns: Regex patterns to test.
+
+    Returns:
+        True if at least one pattern matches.
+    """
+    return any(re.search(p, text, re.IGNORECASE) for p in patterns)
+
+
+def _is_reset(text: str) -> bool:
+    """Detect reset / start-over intent."""
+    return _any(
+        text, r"\breset\b", r"\bstart over\b", r"\bclear all\b", r"\bbegin again\b"
+    )
+
+
+def _is_help(text: str) -> bool:
+    """Detect help intent."""
+    return _any(text, r"\bhelp\b", r"\bwhat can you\b", r"\bwhat do you understand\b")
+
+
+def _is_run(text: str) -> bool:
+    """Detect 'run simulation' intent."""
+    return _any(
+        text,
+        r"\brun\b",
+        r"\bgo\b",
+        r"\bsimulat",
+        r"\bcalculat",
+        r"\bshow results\b",
+        r"\bshow me\b",
+        r"\bshow the results\b",
+        r"\bresults please\b",
+    )
+
+
+def _is_show_all(text: str) -> bool:
+    """Detect 'show all charts' intent."""
+    return _any(
+        text,
+        r"\bshow (?:all|every)",
+        r"\ball charts\b",
+        r"\beverything\b",
+        r"\ball views\b",
+    )
+
+
+def _is_show_pots(text: str) -> bool:
+    """Detect 'show pot breakdown' intent."""
+    return _any(
+        text,
+        r"\bwhich pot\b",
+        r"\bpot (?:runs out|breakdown|chart|view)\b",
+        r"\bshow (?:the )?pots\b",
+        r"\bindividual pots\b",
+        r"\bpots first\b",
+        r"\bpot composition\b",
+    )
+
+
+def _is_show_risk(text: str) -> bool:
+    """Detect 'show Monte Carlo / risk' intent."""
+    return _any(
+        text,
+        r"\bmonte carlo\b",
+        r"\brisk\b",
+        r"\bfan chart\b",
+        r"\bprobability\b",
+        r"\bworried\b",
+        r"\bruin\b",
+        r"\buncertain",
+    )
+
+
+def _is_show_sequence(text: str) -> bool:
+    """Detect 'show sequence-of-returns' intent."""
+    return _any(
+        text,
+        r"\bsequence of returns\b",
+        r"\bsequence.returns\b",
+        r"\bmarket crash\b",
+        r"\nearly crash\b",
+        r"\bcrash early\b",
+        r"\bbad early\b",
+        r"\bsequence risk\b",
+        r"\bcrashe?s? early\b",
+    )
+
+
+def _is_show_comparison(text: str) -> bool:
+    """Detect 'show baseline vs scenario comparison' intent."""
+    return _any(
+        text,
+        r"\bbaseline vs\b",
+        r"\bcompar",
+        r"\bbaseline chart\b",
+        r"\bscenario chart\b",
+    )
+
+
+# ── Main message parser ────────────────────────────────────────────────────────
+
+
+def _parse_message(
+    text: str, start_age: int, end_age: int
+) -> dict[str, Any]:
+    """Parse a user message and return a structured intent dict.
+
+    Extracts parameter updates, life events to add, which charts to show,
+    and whether to auto-run the simulation.
 
     Args:
         text: Raw user message.
-        scenario: Current scenario state (used for context in replies).
+        start_age: Current scenario start age (used for range validation).
+        end_age: Current scenario end age (used for range validation).
 
     Returns:
-        ParsedIntent describing what to do in response.
+        Dict with keys:
+
+        - ``"action"`` — primary intent string
+        - ``"updates"`` — parameter changes to apply
+        - ``"lump_events"`` — list of :class:`~ifa.models.LumpSumEvent`
+        - ``"spend_events"`` — list of :class:`~ifa.models.SpendingStepEvent`
+        - ``"charts"`` — which chart types to render
+        - ``"auto_run"`` — whether to run the simulation before responding
     """
-    low = text.lower().strip()
+    t = text.strip()
 
-    # ------------------------------------------------------------------ reset
-    if re.search(r"\b(reset|start over|begin again|clear all|restart)\b", low):
-        return ParsedIntent(
-            reply=(
-                "OK, I've reset everything back to the defaults. "
-                "What would you like to explore?"
-            ),
-            reset=True,
-        )
+    # ── Hard overrides first ──────────────────────────────────────────────
+    if _is_reset(t):
+        return {
+            "action": "reset",
+            "updates": {},
+            "lump_events": [],
+            "spend_events": [],
+            "charts": [],
+            "auto_run": False,
+        }
 
-    # -------------------------------------------------------------- show setup
-    if re.search(
-        r"\b(show.*(assumption|setup|scenario|setting)|"
-        r"what.*(assumption|setup|scenario|entered)|"
-        r"current (scenario|setup|assumption)|"
-        r"my (assumption|setup|scenario))\b",
-        low,
-    ):
-        return ParsedIntent(reply="", show_setup=True)
+    if _is_help(t):
+        return {
+            "action": "help",
+            "updates": {},
+            "lump_events": [],
+            "spend_events": [],
+            "charts": [],
+            "auto_run": False,
+        }
 
-    # ---------------------------------------------------- run / simulate (generic)
-    _is_chart_request = bool(
-        re.search(
-            r"\b(which pot|markets? crash|sequence|timing|how worried|"
-            r"risky|ruin|probabilit|compare|difference|impact|"
-            r"composition|drains|pot breakdown|individual pot)\b",
-            low,
-        )
-    )
-    if not _is_chart_request and re.search(
-        r"\b(run|simulate|show me|go|calculate|what does it look|"
-        r"what('?s| is) it look|project|forecast)\b",
-        low,
-    ):
-        return ParsedIntent(
-            reply="Running your simulation…",
-            run_simulation=True,
-            chart_types=["baseline_vs_scenario", "monte_carlo"],
-        )
+    # ── Extract parameter updates from the whole message ─────────────────
+    updates: dict[str, Any] = {}
+    s_age = _extract_start_age(t)
+    if s_age is not None:
+        updates["start_age"] = s_age
 
-    # ---------------------------------------------------------- specific chart requests
-    if re.search(
-        r"\b(markets? crash|sequence|timing risk|early (bad|crash|loss)|"
-        r"order of returns?)\b",
-        low,
-    ):
-        return ParsedIntent(
-            reply="Showing the sequence-of-returns chart…",
-            run_simulation=True,
-            chart_types=["sequence_of_returns"],
-        )
+    e_age = _extract_end_age(t)
+    if e_age is not None:
+        updates["end_age"] = e_age
 
-    if re.search(
-        r"\b(which pot|pot breakdown|composition|drains? first|"
-        r"pot.*(run out|empty|deplet)|individual pot)\b",
-        low,
-    ):
-        return ParsedIntent(
-            reply="Showing pot breakdown charts…",
-            run_simulation=True,
-            chart_types=["pots_stacked", "pots_individual"],
-        )
+    tfp = _extract_tax_free_pot(t)
+    if tfp is not None:
+        updates["tax_free_pot"] = tfp
 
-    if re.search(
-        r"\b(how worried|how risky|ruin|run out|go broke|"
-        r"probabilit|chances|fan chart|monte carlo)\b",
-        low,
-    ):
-        return ParsedIntent(
-            reply="Showing the Monte Carlo probability chart…",
-            run_simulation=True,
-            chart_types=["monte_carlo"],
-        )
+    dc = _extract_dc_pot(t)
+    if dc is not None:
+        updates["dc_pot_balance"] = dc
 
-    if re.search(r"\b(compare|difference|impact|what changed|baseline)\b", low):
-        return ParsedIntent(
-            reply="Showing the baseline vs scenario comparison…",
-            run_simulation=True,
-            chart_types=["baseline_vs_scenario"],
-        )
+    spending = _extract_baseline_spending(t)
+    if spending is not None:
+        updates["baseline_spending"] = spending
 
-    # ----------------------------------------- DB pension (before generic spending)
-    db_match = re.search(
-        r"(db|defined.?benefit|final salary)"
-        r".*?£?\s*([\d,]+(?:\.\d+)?)\s*([kKmM])?"
-        r".*?(?:from\s+age|age|at)\s+(\d+)",
-        low,
-    )
-    if db_match:
-        raw = db_match.group(2).replace(",", "")
-        suffix = (db_match.group(3) or "").lower()
-        amount = float(raw) * (1_000.0 if suffix == "k" else 1.0)
-        age = int(db_match.group(4))
-        return ParsedIntent(
-            reply=(
-                f"Added a DB pension of £{amount:,.0f}/year starting at age {age}. "
-                "Type *'run it'* to see the updated projection."
-            ),
-            updates={"_add_db_pension": (age, amount)},
-        )
+    new_db_pensions = _extract_db_pensions(t)
+    if new_db_pensions:
+        updates["db_pensions_add"] = new_db_pensions
 
-    # "£8,000/year from age 66" with "pension" / "income" keyword
-    db_match2 = re.search(
-        r"£\s*([\d,]+(?:\.\d+)?)\s*([kKmM])?"
-        r"\s*(?:per year|/year|a year)"
-        r".*?(?:from\s+age|from)\s+(\d+)",
-        low,
-    )
-    if db_match2 and re.search(r"\b(pension|income)\b", low):
-        raw = db_match2.group(1).replace(",", "")
-        suffix = (db_match2.group(2) or "").lower()
-        amount = float(raw) * (1_000.0 if suffix == "k" else 1.0)
-        age = int(db_match2.group(3))
-        return ParsedIntent(
-            reply=(
-                f"Added a DB pension of £{amount:,.0f}/year starting at age {age}. "
-                "Type *'run it'* to see the updated projection."
-            ),
-            updates={"_add_db_pension": (age, amount)},
-        )
+    market = _extract_market_params(t)
+    updates.update(market)
 
-    # ---------------------------------------------- spending step (ongoing extra cost)
-    step_match = re.search(
-        r"£?\s*([\d,]+(?:\.\d+)?)\s*([kKmM])?"
-        r"\s*(?:per year|/year|a year|yearly|annually)"
-        r".*?(?:from age|from)\s+(\d+)"
-        r"(?:.*?(?:to age|until age|to|until)\s+(\d+))?",
-        low,
-    )
-    if step_match:
-        raw = step_match.group(1).replace(",", "")
-        suffix = (step_match.group(2) or "").lower()
-        amount = float(raw) * (1_000.0 if suffix == "k" else 1.0)
-        start = int(step_match.group(3))
-        end = int(step_match.group(4)) if step_match.group(4) else None
-        end_desc = f" to age {end}" if end else " onwards"
-        return ParsedIntent(
-            reply=(
-                f"Added an ongoing extra cost of £{amount:,.0f}/year "
-                f"from age {start}{end_desc}. "
-                "Type *'run it'* to see the updated projection."
-            ),
-            updates={"_add_spending_step": (start, amount, end)},
-        )
+    # Use effective start/end ages (possibly just updated) for event validation
+    eff_start = updates.get("start_age", start_age)
+    eff_end = updates.get("end_age", end_age)
 
-    # ------------------------------------------------ lump sum event (one-off cost)
-    lump_match = re.search(
-        r"£?\s*([\d,]+(?:\.\d+)?)\s*([kKmM])?"
-        r".*?(?:at age|age|at)\s+(\d+)",
-        low,
-    )
-    if lump_match and re.search(
-        r"\b(lump|one.?off|repair|replac|car|holiday|gift|cost|expense|spend)\b",
-        low,
-    ):
-        raw = lump_match.group(1).replace(",", "")
-        suffix = (lump_match.group(2) or "").lower()
-        amount = float(raw) * (1_000.0 if suffix == "k" else 1.0)
-        age = int(lump_match.group(3))
-        return ParsedIntent(
-            reply=(
-                f"Added a one-off cost of £{amount:,.0f} at age {age}. "
-                "Type *'run it'* to see the updated projection."
-            ),
-            updates={"_add_lump_sum": (age, amount)},
-        )
+    lump_events = _extract_lump_events(t, eff_start, eff_end)
+    spend_events = _extract_spend_events(t, eff_start, eff_end)
 
-    # ---------------------------------------------------------- tax-free pot
-    if re.search(r"\b(tax.?free|isa|premium bond)\b", low):
-        amount = _parse_amount(text)
-        if amount is not None:
-            return ParsedIntent(
-                reply=(
-                    f"Set tax-free pot to £{amount:,.0f}. "
-                    "Type *'run it'* to see the updated projection."
-                ),
-                updates={"tax_free_pot": amount},
-            )
+    has_events = bool(lump_events or spend_events)
+    has_params = bool(updates)
 
-    # --------------------------------------------------------------- DC pot
-    if re.search(r"\b(dc pot|dc pension|pension pot|sipp|workplace)\b", low):
-        amount = _parse_amount(text)
-        if amount is not None:
-            return ParsedIntent(
-                reply=(
-                    f"Set primary DC pot to £{amount:,.0f}. "
-                    "Type *'run it'* to see the updated projection."
-                ),
-                updates={"_update_primary_dc_pot": amount},
-            )
+    # ── Determine primary intent from keywords ────────────────────────────
+    if _is_show_all(t):
+        return {
+            "action": "show_all",
+            "updates": updates,
+            "lump_events": lump_events,
+            "spend_events": spend_events,
+            "charts": [
+                _CHART_COMPARISON,
+                _CHART_FAN,
+                _CHART_SEQUENCE,
+                _CHART_STACKED,
+                _CHART_INDIVIDUAL,
+            ],
+            "auto_run": True,
+        }
 
-    # ------------------------------------------------------------------ spending
-    if re.search(
-        r"\b(spend(ing)?|annual spend|yearly spend|drawdown amount|living costs?)\b",
-        low,
-    ):
-        amount = _parse_amount(text)
-        if amount is not None:
-            return ParsedIntent(
-                reply=(
-                    f"Set baseline spending to £{amount:,.0f}/year. "
-                    "Type *'run it'* to see the updated projection."
-                ),
-                updates={"baseline_spending": amount},
-            )
+    if _is_show_pots(t):
+        return {
+            "action": "show_pots",
+            "updates": updates,
+            "lump_events": lump_events,
+            "spend_events": spend_events,
+            "charts": [_CHART_STACKED, _CHART_INDIVIDUAL],
+            "auto_run": True,
+        }
 
-    # ------------------------------------------------------- retire / drawdown age
-    retire_match = re.search(
-        r"\b(retire|retirement|drawdown|draw down|access)\b"
-        r".*?\b(?:at|from|age)\b"
-        r".*?\b(\d{2,3})\b",
-        low,
-    )
-    if retire_match:
-        age = int(retire_match.group(2))
-        return ParsedIntent(
-            reply=(
-                f"Set primary DC pot drawdown start age to {age}. "
-                "Type *'run it'* to see the updated projection."
-            ),
-            updates={"_update_primary_dc_drawdown_age": age},
-        )
+    if _is_show_sequence(t):
+        return {
+            "action": "show_sequence",
+            "updates": updates,
+            "lump_events": lump_events,
+            "spend_events": spend_events,
+            "charts": [_CHART_SEQUENCE],
+            "auto_run": True,
+        }
 
-    # ------------------------------------------------------------- end age
-    if re.search(
-        r"\b(end age|run to|until age|to age|project to)\b"
-        r".*?\b(\d{2,3})\b",
-        low,
-    ):
-        nums = re.findall(r"\b(\d{2,3})\b", low)
-        if nums:
-            age = int(nums[-1])
-            if 60 <= age <= 120:
-                return ParsedIntent(
-                    reply=(
-                        f"Set projection end age to {age}. "
-                        "Type *'run it'* to see the updated projection."
-                    ),
-                    updates={"end_age": age},
-                )
+    if _is_show_risk(t):
+        return {
+            "action": "show_risk",
+            "updates": updates,
+            "lump_events": lump_events,
+            "spend_events": spend_events,
+            "charts": [_CHART_FAN],
+            "auto_run": True,
+        }
 
-    # ---------------------------------------------------------- current age / start age
-    age_match = re.search(
-        r"\b(?:i(?:'m| am|m)\s+(\d{2,3})|"
-        r"age\s+(\d{2,3})|"
-        r"current(?:ly)?\s+(\d{2,3})|"
-        r"start\s+age\s+(\d{2,3}))\b",
-        low,
-    )
-    if age_match:
-        nums = re.findall(r"\b(\d{2,3})\b", age_match.group(0))
-        if nums:
-            age = int(nums[0])
-            if 18 <= age <= 100:
-                return ParsedIntent(
-                    reply=(
-                        f"Set current age to {age}. "
-                        "Type *'run it'* to see the updated projection."
-                    ),
-                    updates={"start_age": age},
-                )
+    if _is_show_comparison(t):
+        return {
+            "action": "show_comparison",
+            "updates": updates,
+            "lump_events": lump_events,
+            "spend_events": spend_events,
+            "charts": [_CHART_COMPARISON],
+            "auto_run": True,
+        }
 
-    return ParsedIntent(
-        reply=(
-            "I didn't quite understand that. Try something like "
-            "*\"I'm 55\"*, *\"DC pot £300,000\"*, "
-            "*\"Care costs £6,000/year from age 80\"*, or *\"Run it\"*."
-        )
-    )
+    if _is_run(t):
+        return {
+            "action": "run",
+            "updates": updates,
+            "lump_events": lump_events,
+            "spend_events": spend_events,
+            "charts": [_CHART_COMPARISON, _CHART_FAN, _CHART_SEQUENCE],
+            "auto_run": True,
+        }
+
+    # ── Life events with implicit "what if" run ───────────────────────────
+    if has_events:
+        return {
+            "action": "add_events",
+            "updates": updates,
+            "lump_events": lump_events,
+            "spend_events": spend_events,
+            "charts": [_CHART_COMPARISON, _CHART_FAN],
+            "auto_run": True,
+        }
+
+    # ── Pure parameter updates, no run ───────────────────────────────────
+    if has_params:
+        return {
+            "action": "set_params",
+            "updates": updates,
+            "lump_events": [],
+            "spend_events": [],
+            "charts": [],
+            "auto_run": False,
+        }
+
+    return {
+        "action": "unknown",
+        "updates": {},
+        "lump_events": [],
+        "spend_events": [],
+        "charts": [],
+        "auto_run": False,
+    }
 
 
-# ---------------------------------------------------------------------------
-# Scenario state helpers
-# ---------------------------------------------------------------------------
+# ── Session state ──────────────────────────────────────────────────────────────
 
 
-def _default_scenario() -> ChatScenario:
-    """Create a ChatScenario populated with config defaults.
+def _default_state() -> dict[str, Any]:
+    """Return the default initial session state values.
 
     Returns:
-        Fresh ChatScenario instance.
+        Dict of default parameter values.
     """
-    return ChatScenario()
+    return {
+        "start_age": START_AGE,
+        "end_age": END_AGE,
+        "tax_free_pot": float(INITIAL_TAX_FREE_POT),
+        "baseline_spending": _DEFAULT_SPENDING,
+        "dc_pots": list(DC_POTS),
+        "dc_pot_names": [f"DC Pot {i + 1}" for i in range(len(DC_POTS))],
+        "db_pensions": list(DB_PENSIONS),
+        "db_pension_names": [f"DB Pension {i + 1}" for i in range(len(DB_PENSIONS))],
+        "life_events": [],
+        "life_event_names": [],
+        "mean_return": MEAN_RETURN,
+        "std_return": STD_RETURN,
+        "random_seed": RANDOM_SEED,
+        "num_simulations": NUM_SIMULATIONS,
+        "sim_run": False,
+        "sim_version": 0,
+        "sim_cache": None,
+    }
 
 
-def _apply_updates(
-    scenario: ChatScenario, updates: dict
-) -> tuple[ChatScenario, str]:
-    """Apply a dict of updates to a ChatScenario.
+def _init_session_state() -> None:
+    """Initialize session state on first run.
 
-    Handles both direct attribute updates (plain keys) and special prefixed
-    keys (``_add_lump_sum``, ``_add_spending_step``, etc.).
+    Sets all scenario parameters, chat history, and simulation cache to
+    their defaults if they have not yet been set.
+    """
+    if "chat_initialized" in st.session_state:
+        return
+    defaults = _default_state()
+    for key, value in defaults.items():
+        st.session_state[key] = value
+    st.session_state["messages"] = []
+    st.session_state["chat_initialized"] = True
+
+
+def _reset_state() -> None:
+    """Reset scenario parameters and simulation cache to defaults.
+
+    Preserves the existing message history so the conversation is not lost.
+    """
+    defaults = _default_state()
+    for key, value in defaults.items():
+        st.session_state[key] = value
+
+
+def _apply_updates(updates: dict[str, Any]) -> list[str]:
+    """Apply extracted parameter updates to session state.
 
     Args:
-        scenario: Current scenario.
-        updates: Dict of updates from ``ParsedIntent.updates``.
+        updates: Dict of parameter changes as produced by :func:`_parse_message`.
 
     Returns:
-        Tuple of ``(updated_scenario, error_message)``.  On success the error
-        string is empty; on validation failure the scenario is unchanged.
+        List of human-readable confirmation strings for each applied change.
     """
-    if not updates:
-        return scenario, ""
+    confirmations: list[str] = []
 
-    dc_pots = list(scenario.dc_pots)
-    db_pensions = list(scenario.db_pensions)
-    life_events: list[LumpSumEvent | SpendingStepEvent] = list(scenario.life_events)
-    kwargs: dict = {}
+    if "start_age" in updates:
+        old = st.session_state["start_age"]
+        new = updates["start_age"]
+        st.session_state["start_age"] = new
+        confirmations.append(f"Start age: {old} → **{new}**")
+        # Invalidate sim
+        st.session_state["sim_run"] = False
 
-    for key, value in updates.items():
-        if key == "_add_lump_sum":
-            age, amount = value
-            if age <= scenario.start_age or age > scenario.end_age:
-                return scenario, (
-                    f"Age {age} is outside the simulation range "
-                    f"({scenario.start_age}–{scenario.end_age}). "
-                    "Please adjust start or end age first."
-                )
-            life_events.append(LumpSumEvent(age=age, amount=amount))
+    if "end_age" in updates:
+        old = st.session_state["end_age"]
+        new = updates["end_age"]
+        st.session_state["end_age"] = new
+        confirmations.append(f"End age: {old} → **{new}**")
+        st.session_state["sim_run"] = False
 
-        elif key == "_add_spending_step":
-            start, amount, end = value
-            if start <= scenario.start_age or start > scenario.end_age:
-                return scenario, (
-                    f"Start age {start} is outside the simulation range "
-                    f"({scenario.start_age}–{scenario.end_age}). "
-                    "Please adjust start or end age first."
-                )
-            if end is not None and (end < start or end > scenario.end_age):
-                return scenario, (
-                    f"End age {end} must be between {start} and "
-                    f"{scenario.end_age}."
-                )
-            life_events.append(
-                SpendingStepEvent(
-                    start_age=start, extra_per_year=amount, end_age=end
-                )
+    if "tax_free_pot" in updates:
+        new = updates["tax_free_pot"]
+        st.session_state["tax_free_pot"] = new
+        confirmations.append(f"Tax-free pot: **£{new:,.0f}**")
+        st.session_state["sim_run"] = False
+
+    if "dc_pot_balance" in updates:
+        new_bal = updates["dc_pot_balance"]
+        pots = list(st.session_state["dc_pots"])
+        if pots:
+            pots[0] = (pots[0][0], new_bal)
+        else:
+            pots = [(57, new_bal)]
+        st.session_state["dc_pots"] = pots
+        confirmations.append(f"Primary DC pot balance: **£{new_bal:,.0f}**")
+        st.session_state["sim_run"] = False
+
+    if "baseline_spending" in updates:
+        new = updates["baseline_spending"]
+        st.session_state["baseline_spending"] = new
+        confirmations.append(f"Baseline annual spending: **£{new:,.0f}**")
+        st.session_state["sim_run"] = False
+
+    if "db_pensions_add" in updates:
+        new_pensions: list[tuple[int, float]] = updates["db_pensions_add"]
+        existing: list[tuple[int, float]] = list(st.session_state["db_pensions"])
+        names: list[str] = list(st.session_state["db_pension_names"])
+        for age, amount in new_pensions:
+            existing.append((age, amount))
+            names.append(f"DB Pension {len(existing)}")
+            confirmations.append(
+                f"Added DB pension: **£{amount:,.0f}/year from age {age}**"
             )
+        st.session_state["db_pensions"] = existing
+        st.session_state["db_pension_names"] = names
+        st.session_state["sim_run"] = False
 
-        elif key == "_add_db_pension":
-            age, amount = value
-            db_pensions.append((age, amount))
+    if "mean_return" in updates:
+        new = updates["mean_return"]
+        st.session_state["mean_return"] = new
+        confirmations.append(f"Mean real return: **{new * 100:.1f}%**")
+        st.session_state["sim_run"] = False
 
-        elif key == "_update_primary_dc_pot":
-            if dc_pots:
-                dc_pots[0] = (dc_pots[0][0], value)
-            else:
-                dc_pots = [(scenario.start_age, value)]
+    if "std_return" in updates:
+        new = updates["std_return"]
+        st.session_state["std_return"] = new
+        confirmations.append(f"Return volatility: **{new * 100:.1f}%**")
+        st.session_state["sim_run"] = False
 
-        elif key == "_update_primary_dc_drawdown_age":
-            if dc_pots:
-                dc_pots[0] = (value, dc_pots[0][1])
-            else:
-                dc_pots = [(value, 0.0)]
+    if "num_simulations" in updates:
+        new = updates["num_simulations"]
+        st.session_state["num_simulations"] = new
+        confirmations.append(f"Monte Carlo simulations: **{new:,}**")
+        st.session_state["sim_run"] = False
 
-        elif not key.startswith("_"):
-            kwargs[key] = value
+    return confirmations
 
-    new_scenario = ChatScenario(
-        start_age=kwargs.get("start_age", scenario.start_age),
-        end_age=kwargs.get("end_age", scenario.end_age),
-        tax_free_pot=kwargs.get("tax_free_pot", scenario.tax_free_pot),
-        dc_pots=dc_pots,
-        db_pensions=db_pensions,
-        baseline_spending=kwargs.get("baseline_spending", scenario.baseline_spending),
-        life_events=life_events,
-        mean_return=kwargs.get("mean_return", scenario.mean_return),
-        std_return=kwargs.get("std_return", scenario.std_return),
-        random_seed=kwargs.get("random_seed", scenario.random_seed),
-        num_simulations=kwargs.get("num_simulations", scenario.num_simulations),
+
+def _apply_events(
+    lump_events: list[LumpSumEvent],
+    spend_events: list[SpendingStepEvent],
+) -> list[str]:
+    """Append new life events to session state.
+
+    Args:
+        lump_events: One-off lump sum events to add.
+        spend_events: Ongoing spending step events to add.
+
+    Returns:
+        List of human-readable confirmation strings.
+    """
+    confirmations: list[str] = []
+    existing: list[LumpSumEvent | SpendingStepEvent] = list(
+        st.session_state["life_events"]
     )
+    names: list[str] = list(st.session_state["life_event_names"])
 
-    if new_scenario.start_age >= new_scenario.end_age:
-        return scenario, (
-            f"Start age ({new_scenario.start_age}) must be less than "
-            f"end age ({new_scenario.end_age})."
+    for ev in lump_events:
+        existing.append(ev)
+        names.append(f"Lump Sum {len(existing)}")
+        confirmations.append(
+            f"Added one-off cost: **£{ev.amount:,.0f} at age {ev.age}**"
         )
 
-    return new_scenario, ""
-
-
-def _scenario_summary(scenario: ChatScenario) -> str:
-    """Build a human-readable markdown summary of the current scenario.
-
-    Args:
-        scenario: Current scenario state.
-
-    Returns:
-        Formatted multi-line markdown string.
-    """
-    lines = [
-        "**Current scenario setup:**\n",
-        f"- **Current age:** {scenario.start_age}",
-        f"- **End age:** {scenario.end_age}",
-        f"- **Tax-free pot:** £{scenario.tax_free_pot:,.0f}",
-        f"- **Baseline spending:** £{scenario.baseline_spending:,.0f}/year",
-        f"- **Mean return:** {scenario.mean_return * 100:.1f}%",
-        f"- **Return std dev:** {scenario.std_return * 100:.1f}%",
-    ]
-
-    if scenario.dc_pots:
-        lines.append("- **DC pots:**")
-        for i, (draw_age, balance) in enumerate(scenario.dc_pots, 1):
-            lines.append(
-                f"  - Pot {i}: £{balance:,.0f} — drawable from age {draw_age}"
+    for ev in spend_events:
+        existing.append(ev)
+        names.append(f"Spending Step {len(existing)}")
+        if ev.end_age is not None:
+            confirmations.append(
+                f"Added ongoing cost: **£{ev.extra_per_year:,.0f}/year from age "
+                f"{ev.start_age} to {ev.end_age}**"
             )
-    else:
-        lines.append("- **DC pots:** none set")
+        else:
+            confirmations.append(
+                f"Added ongoing cost: **£{ev.extra_per_year:,.0f}/year from age "
+                f"{ev.start_age}**"
+            )
 
-    if scenario.db_pensions:
-        lines.append("- **DB pensions:**")
-        for start, amount in scenario.db_pensions:
-            lines.append(f"  - £{amount:,.0f}/year from age {start}")
-    else:
-        lines.append("- **DB pensions:** none")
+    if confirmations:
+        st.session_state["life_events"] = existing
+        st.session_state["life_event_names"] = names
+        st.session_state["sim_run"] = False
 
-    if scenario.life_events:
-        lines.append("- **Life events:**")
-        for event in scenario.life_events:
-            if isinstance(event, LumpSumEvent):
-                lines.append(
-                    f"  - One-off: £{event.amount:,.0f} at age {event.age}"
-                )
-            else:
-                end_desc = (
-                    f" to age {event.end_age}" if event.end_age else " onwards"
-                )
-                lines.append(
-                    f"  - Ongoing: £{event.extra_per_year:,.0f}/year "
-                    f"from age {event.start_age}{end_desc}"
-                )
-    else:
-        lines.append("- **Life events:** none added yet")
-
-    return "\n".join(lines)
+    return confirmations
 
 
-# ---------------------------------------------------------------------------
-# Simulation helpers
-# ---------------------------------------------------------------------------
+# ── Simulation runner ──────────────────────────────────────────────────────────
 
 
-def _build_db_income(
-    ages: np.ndarray, db_pensions: list[tuple[int, float]]
-) -> np.ndarray:
-    """Build a DB income array aligned with ``ages``.
+def _run_simulation() -> dict[str, Any] | None:
+    """Run the simulation with current session state parameters.
 
-    Args:
-        ages: Inclusive age array for the simulation horizon.
-        db_pensions: DB pension streams as ``(start_age, annual_amount)`` tuples.
+    Caches results in ``st.session_state["sim_cache"]`` and bumps
+    ``sim_version``.  Returns cached results immediately if parameters have
+    not changed since the last run.
 
     Returns:
-        Annual DB income values aligned with ``ages``.
+        Simulation result dict, or ``None`` on error.
     """
-    return np.array(
-        [calculate_db_pension_income(int(age), db_pensions) for age in ages],
+    if st.session_state.get("sim_run"):
+        return st.session_state.get("sim_cache")
+
+    s = st.session_state
+    start_age: int = s["start_age"]
+    end_age: int = s["end_age"]
+    tax_free_pot: float = s["tax_free_pot"]
+    baseline_spending: float = s["baseline_spending"]
+    dc_pots: list[tuple[int, float]] = s["dc_pots"]
+    dc_pot_names: list[str] = s["dc_pot_names"]
+    db_pensions: list[tuple[int, float]] = s["db_pensions"]
+    db_pension_names: list[str] = s["db_pension_names"]
+    life_events: list[LumpSumEvent | SpendingStepEvent] = s["life_events"]
+    life_event_names: list[str] = s["life_event_names"]
+    mean_return: float = s["mean_return"]
+    std_return: float = s["std_return"]
+    random_seed: int = s["random_seed"]
+    num_simulations: int = s["num_simulations"]
+
+    if not dc_pots:
+        dc_pots = [(57, 0.0)]
+
+    primary_dc_pot = float(dc_pots[0][1])
+    secondary_dc_pot = (
+        float(sum(p[1] for p in dc_pots[1:])) if len(dc_pots) > 1 else 0.0
+    )
+    secondary_draw_age: int = int(dc_pots[1][0]) if len(dc_pots) > 1 else end_age
+
+    ages = np.arange(start_age, end_age + 1, dtype=np.int_)
+    db_income = np.array(
+        [
+            sum(
+                float(amt)
+                for (db_age, amt) in db_pensions
+                if int(age) >= int(db_age)
+            )
+            for age in ages
+        ],
         dtype=np.float64,
     )
 
+    try:
+        baseline_required = build_required_withdrawals(
+            ages=ages,
+            baseline_spending=baseline_spending,
+            db_income=db_income,
+            events=(),
+        )
+        scenario_required = build_required_withdrawals(
+            ages=ages,
+            baseline_spending=baseline_spending,
+            db_income=db_income,
+            events=life_events,
+        )
+    except ValueError:
+        return None
 
-def _scenario_engine_params(
-    scenario: ChatScenario,
-) -> tuple[float, float, int | None, list[tuple[int, float]] | None]:
-    """Extract DC pot engine parameters from a scenario.
-
-    Args:
-        scenario: Current scenario state.
-
-    Returns:
-        Tuple of ``(dc_pot, secondary_dc_pot, secondary_dc_drawdown_age,
-        extra_dc_pots)``.  ``extra_dc_pots`` is the full DC pots list when
-        there are two or more pots (so individual drawdown ages are preserved),
-        or ``None`` when there is only one pot.
-    """
-    dc_pot = scenario.dc_pots[0][1] if scenario.dc_pots else 0.0
-    secondary_dc_pot = (
-        sum(b for _, b in scenario.dc_pots[1:])
-        if len(scenario.dc_pots) > 1
-        else 0.0
-    )
-    secondary_dc_drawdown_age = (
-        scenario.dc_pots[1][0] if len(scenario.dc_pots) > 1 else None
-    )
-    # Pass dc_pots when ≥ 2 pots to preserve individual drawdown ages.
-    extra_dc_pots: list[tuple[int, float]] | None = (
-        scenario.dc_pots if len(scenario.dc_pots) >= 2 else None
-    )
-    return dc_pot, secondary_dc_pot, secondary_dc_drawdown_age, extra_dc_pots
-
-
-def _build_simulation_results(
-    scenario: ChatScenario,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Run baseline and scenario simulations on the same return path.
-
-    Args:
-        scenario: Current scenario configuration.
-
-    Returns:
-        Tuple of ``(ages, baseline_balances, scenario_balances,
-        baseline_withdrawals, scenario_withdrawals)``.
-    """
-    ages = np.arange(scenario.start_age, scenario.end_age + 1, dtype=np.int_)
-    num_years = scenario.end_age - scenario.start_age
-    db_income = _build_db_income(ages, scenario.db_pensions)
-    returns = generate_random_returns(
-        num_years, scenario.mean_return, scenario.std_return, scenario.random_seed
+    spending_drawdown = build_spending_drawdown_schedule(
+        ages=ages,
+        baseline_spending=baseline_spending,
+        db_income=db_income,
+        events=life_events,
     )
 
-    baseline_withdrawals = build_required_withdrawals(
-        ages, scenario.baseline_spending, db_income, []
-    )
-    scenario_withdrawals = build_required_withdrawals(
-        ages, scenario.baseline_spending, db_income, scenario.life_events
+    years = end_age - start_age
+    # Fresh RNG seeded with random_seed ensures deterministic, comparable results
+    # across re-runs with the same parameters.
+    returns = (
+        np.random.default_rng(random_seed)
+        .normal(mean_return, std_return, years)
+        .astype(np.float64)
     )
 
-    dc_pot, secondary_dc_pot, secondary_dc_drawdown_age, extra_dc_pots = (
-        _scenario_engine_params(scenario)
-    )
+    base_strategy = create_fixed_real_drawdown_strategy(baseline_spending)
 
     _, baseline_balances, *_ = simulate_multi_pot_pension_path(
-        scenario.tax_free_pot,
-        dc_pot,
-        secondary_dc_pot,
-        secondary_dc_drawdown_age,
-        scenario.db_pensions,
-        scenario.start_age,
-        scenario.end_age,
-        returns,
-        withdrawals_required=baseline_withdrawals,
-        dc_pots=extra_dc_pots,
+        tax_free_pot=tax_free_pot,
+        dc_pot=primary_dc_pot,
+        secondary_dc_pot=secondary_dc_pot,
+        secondary_dc_drawdown_age=secondary_draw_age,
+        db_pensions=db_pensions,
+        start_age=start_age,
+        end_age=end_age,
+        returns=returns,
+        drawdown_fn=base_strategy,
+        withdrawals_required=baseline_required,
+        dc_pots=dc_pots,
     )
     _, scenario_balances, *_ = simulate_multi_pot_pension_path(
-        scenario.tax_free_pot,
-        dc_pot,
-        secondary_dc_pot,
-        secondary_dc_drawdown_age,
-        scenario.db_pensions,
-        scenario.start_age,
-        scenario.end_age,
-        returns,
-        withdrawals_required=scenario_withdrawals,
-        dc_pots=extra_dc_pots,
+        tax_free_pot=tax_free_pot,
+        dc_pot=primary_dc_pot,
+        secondary_dc_pot=secondary_dc_pot,
+        secondary_dc_drawdown_age=secondary_draw_age,
+        db_pensions=db_pensions,
+        start_age=start_age,
+        end_age=end_age,
+        returns=returns,
+        drawdown_fn=base_strategy,
+        withdrawals_required=scenario_required,
+        dc_pots=dc_pots,
     )
 
-    return (
-        ages,
-        baseline_balances,
-        scenario_balances,
-        baseline_withdrawals,
-        scenario_withdrawals,
-    )
-
-
-def _build_explanation(scenario: ChatScenario) -> str:
-    """Build a plain-English explanation of the current scenario impact.
-
-    Runs both a deterministic comparison and a Monte Carlo simulation to
-    produce the full narrative via ``build_plain_english_explanation``.
-
-    Args:
-        scenario: Current scenario configuration.
-
-    Returns:
-        Human-readable explanation string.
-    """
-    ages, baseline_balances, scenario_balances, _, scenario_withdrawals = (
-        _build_simulation_results(scenario)
-    )
-
-    dc_pot, secondary_dc_pot, secondary_dc_drawdown_age, extra_dc_pots = (
-        _scenario_engine_params(scenario)
-    )
-    strategy_fn = create_fixed_real_drawdown_strategy(scenario.baseline_spending)
-
-    _, mc_paths = run_monte_carlo_simulation(
-        scenario.tax_free_pot,
-        dc_pot,
-        secondary_dc_pot,
-        secondary_dc_drawdown_age,
-        scenario.db_pensions,
-        scenario.start_age,
-        scenario.end_age,
-        scenario.mean_return,
-        scenario.std_return,
-        strategy_fn,
-        scenario.num_simulations,
-        scenario.random_seed,
-        withdrawals_required=scenario_withdrawals,
-        dc_pots=extra_dc_pots,
+    _, monte_carlo_paths = run_monte_carlo_simulation(
+        tax_free_pot=tax_free_pot,
+        dc_pot=primary_dc_pot,
+        secondary_dc_pot=secondary_dc_pot,
+        secondary_dc_drawdown_age=secondary_draw_age,
+        db_pensions=db_pensions,
+        start_age=start_age,
+        end_age=end_age,
+        mean_return=mean_return,
+        std_return=std_return,
+        strategy_fn=base_strategy,
+        num_simulations=num_simulations,
+        seed=random_seed,
+        withdrawals_required=scenario_required,
+        dc_pots=dc_pots,
     )
 
     baseline_metrics = summarize_path(baseline_balances)
     scenario_metrics = summarize_path(scenario_balances)
-    mc_metrics = summarize_monte_carlo(mc_paths)
+    mc_metrics = summarize_monte_carlo(monte_carlo_paths)
 
-    return build_plain_english_explanation(
-        baseline_metrics,
-        scenario_metrics,
-        mc_metrics,
-        scenario.life_events,
-    )
+    cache: dict[str, Any] = {
+        "ages": ages,
+        "baseline_balances": baseline_balances,
+        "scenario_balances": scenario_balances,
+        "monte_carlo_paths": monte_carlo_paths,
+        "spending_drawdown": spending_drawdown,
+        "baseline_metrics": baseline_metrics,
+        "scenario_metrics": scenario_metrics,
+        "mc_metrics": mc_metrics,
+        "primary_dc_pot": primary_dc_pot,
+        "secondary_dc_pot": secondary_dc_pot,
+        "secondary_draw_age": secondary_draw_age,
+        "tax_free_pot": tax_free_pot,
+        "dc_pots": dc_pots,
+        "dc_pot_names": dc_pot_names,
+        "db_pensions": db_pensions,
+        "db_pension_names": db_pension_names,
+        "life_events": life_events,
+        "life_event_names": life_event_names,
+        "start_age": start_age,
+        "end_age": end_age,
+        "mean_return": mean_return,
+        "std_return": std_return,
+        "random_seed": random_seed,
+        "num_simulations": num_simulations,
+        "baseline_spending": baseline_spending,
+        "base_strategy": base_strategy,
+        "baseline_required": baseline_required,
+        "scenario_required": scenario_required,
+    }
+
+    st.session_state["sim_cache"] = cache
+    st.session_state["sim_run"] = True
+    st.session_state["sim_version"] = s.get("sim_version", 0) + 1
+
+    return cache
 
 
-def _build_figures(
-    scenario: ChatScenario, chart_types: list[ChartType]
-) -> list[Figure]:
-    """Build matplotlib figures for the requested chart types.
+# ── Chart rendering ────────────────────────────────────────────────────────────
+
+
+def _render_chart(chart_type: str, cache: dict[str, Any]) -> None:
+    """Render a single chart from the simulation cache.
 
     Args:
-        scenario: Current scenario configuration.
-        chart_types: Which chart types to render.
+        chart_type: One of the ``_CHART_*`` constants.
+        cache: Simulation result cache as returned by :func:`_run_simulation`.
+    """
+    c = cache
+
+    if chart_type == _CHART_COMPARISON:
+        st.markdown("**Baseline vs Life-Events Scenario**")
+        fig = plot_baseline_vs_scenario_balances(
+            ages=c["ages"],
+            baseline_balances=c["baseline_balances"],
+            scenario_balances=c["scenario_balances"],
+            spending_drawdown_schedule=c["spending_drawdown"],
+            secondary_dc_drawdown_age=c["secondary_draw_age"],
+            db_pensions=c["db_pensions"],
+            life_events=c["life_events"],
+            dc_pots=c["dc_pots"],
+            dc_pot_names=c["dc_pot_names"],
+            db_pension_names=c["db_pension_names"],
+            life_event_names=c["life_event_names"],
+            save_output=False,
+            return_figure=True,
+        )
+        if fig is not None:
+            st.pyplot(fig, clear_figure=True)
+
+    elif chart_type == _CHART_FAN:
+        st.markdown("**Monte Carlo Fan Chart**")
+        fig = plot_monte_carlo_fan_chart(
+            tax_free_pot=c["tax_free_pot"],
+            dc_pot=c["primary_dc_pot"],
+            secondary_dc_pot=c["secondary_dc_pot"],
+            secondary_dc_drawdown_age=c["secondary_draw_age"],
+            db_pensions=c["db_pensions"],
+            start_age=c["start_age"],
+            end_age=c["end_age"],
+            mean_return=c["mean_return"],
+            std_return=c["std_return"],
+            strategy_fn=c["base_strategy"],
+            num_simulations=c["num_simulations"],
+            seed=c["random_seed"],
+            withdrawals_required=c["scenario_required"],
+            life_events=c["life_events"],
+            spending_drawdown_schedule=c["spending_drawdown"],
+            dc_pots=c["dc_pots"],
+            dc_pot_names=c["dc_pot_names"],
+            db_pension_names=c["db_pension_names"],
+            life_event_names=c["life_event_names"],
+            save_output=False,
+            return_figure=True,
+        )
+        if fig is not None:
+            st.pyplot(fig, clear_figure=True)
+
+    elif chart_type == _CHART_SEQUENCE:
+        st.markdown("**Sequence-of-Returns Teaching Chart**")
+        fig = plot_sequence_of_returns_scenarios(
+            tax_free_pot=c["tax_free_pot"],
+            dc_pot=c["primary_dc_pot"],
+            secondary_dc_pot=c["secondary_dc_pot"],
+            secondary_dc_drawdown_age=c["secondary_draw_age"],
+            db_pensions=c["db_pensions"],
+            start_age=c["start_age"],
+            end_age=c["end_age"],
+            mean_return=c["mean_return"],
+            std_return=c["std_return"],
+            strategy_fn=c["base_strategy"],
+            withdrawals_required=c["scenario_required"],
+            life_events=c["life_events"],
+            spending_drawdown_schedule=c["spending_drawdown"],
+            dc_pots=c["dc_pots"],
+            dc_pot_names=c["dc_pot_names"],
+            db_pension_names=c["db_pension_names"],
+            life_event_names=c["life_event_names"],
+            save_output=False,
+            return_figure=True,
+        )
+        if fig is not None:
+            st.pyplot(fig, clear_figure=True)
+
+    elif chart_type == _CHART_STACKED:
+        st.markdown("**Pot Composition (Stacked Area)**")
+        fig = plot_pots_stacked_area(
+            tax_free_pot=c["tax_free_pot"],
+            dc_pot=c["primary_dc_pot"],
+            secondary_dc_pot=c["secondary_dc_pot"],
+            secondary_dc_drawdown_age=c["secondary_draw_age"],
+            db_pensions=c["db_pensions"],
+            start_age=c["start_age"],
+            end_age=c["end_age"],
+            mean_return=c["mean_return"],
+            std_return=c["std_return"],
+            strategy_fn=c["base_strategy"],
+            seed=c["random_seed"],
+            withdrawals_required=c["scenario_required"],
+            life_events=c["life_events"],
+            spending_drawdown_schedule=c["spending_drawdown"],
+            dc_pots=c["dc_pots"],
+            dc_pot_names=c["dc_pot_names"],
+            db_pension_names=c["db_pension_names"],
+            life_event_names=c["life_event_names"],
+            save_output=False,
+            return_figure=True,
+        )
+        if fig is not None:
+            st.pyplot(fig, clear_figure=True)
+
+    elif chart_type == _CHART_INDIVIDUAL:
+        st.markdown("**Pot and Income Panels (4 Panels)**")
+        fig = plot_individual_pots_subplots(
+            tax_free_pot=c["tax_free_pot"],
+            dc_pot=c["primary_dc_pot"],
+            secondary_dc_pot=c["secondary_dc_pot"],
+            secondary_dc_drawdown_age=c["secondary_draw_age"],
+            db_pensions=c["db_pensions"],
+            start_age=c["start_age"],
+            end_age=c["end_age"],
+            mean_return=c["mean_return"],
+            std_return=c["std_return"],
+            strategy_fn=c["base_strategy"],
+            seed=c["random_seed"],
+            withdrawals_required=c["scenario_required"],
+            life_events=c["life_events"],
+            dc_pots=c["dc_pots"],
+            dc_pot_names=c["dc_pot_names"],
+            db_pension_names=c["db_pension_names"],
+            life_event_names=c["life_event_names"],
+            save_output=False,
+            return_figure=True,
+        )
+        if fig is not None:
+            st.pyplot(fig, clear_figure=True)
+
+
+def _render_charts_from_cache(
+    chart_types: list[str], cache: dict[str, Any]
+) -> None:
+    """Render all requested chart types from the simulation cache.
+
+    Args:
+        chart_types: Ordered list of ``_CHART_*`` constants.
+        cache: Simulation result cache as returned by :func:`_run_simulation`.
+    """
+    for chart_type in chart_types:
+        _render_chart(chart_type, cache)
+
+
+# ── Response builders ──────────────────────────────────────────────────────────
+
+
+def _build_scenario_summary() -> str:
+    """Build a short human-readable summary of the current scenario.
 
     Returns:
-        List of matplotlib Figure objects ready for ``st.pyplot()``.
-
-    Raises:
-        ValueError: If the scenario age range is invalid.
+        Markdown string describing the current scenario parameters.
     """
-    ages = np.arange(scenario.start_age, scenario.end_age + 1, dtype=np.int_)
-    db_income = _build_db_income(ages, scenario.db_pensions)
-    spending_schedule = build_spending_drawdown_schedule(
-        ages, scenario.baseline_spending, db_income, scenario.life_events
+    s = st.session_state
+    pots_str = ", ".join(
+        f"£{bal:,.0f} from age {age}"
+        for age, bal in s["dc_pots"]
+        if bal > 0
+    )
+    db_str = ", ".join(
+        f"£{amt:,.0f}/year from age {age}"
+        for age, amt in s["db_pensions"]
+        if amt > 0
+    )
+    events_str = (
+        f"{len(s['life_events'])} life event(s)"
+        if s["life_events"]
+        else "no life events"
+    )
+    return (
+        f"**Current scenario:** ages {s['start_age']}–{s['end_age']}, "
+        f"tax-free £{s['tax_free_pot']:,.0f}, "
+        f"DC pots: {pots_str or 'none'}, "
+        f"DB income: {db_str or 'none'}, "
+        f"spending £{s['baseline_spending']:,.0f}/year, "
+        f"{events_str}."
     )
 
-    dc_pot, secondary_dc_pot, secondary_dc_drawdown_age, extra_dc_pots = (
-        _scenario_engine_params(scenario)
-    )
-    strategy_fn = create_fixed_real_drawdown_strategy(scenario.baseline_spending)
-    scenario_withdrawals = build_required_withdrawals(
-        ages, scenario.baseline_spending, db_income, scenario.life_events
-    )
 
-    figures: list[Figure] = []
-
-    for chart_type in chart_types:
-        fig: Figure | None = None
-
-        if chart_type == "baseline_vs_scenario":
-            ages_r, baseline_balances, scenario_balances, _, _ = (
-                _build_simulation_results(scenario)
-            )
-            fig = plot_baseline_vs_scenario_balances(
-                ages_r,
-                baseline_balances,
-                scenario_balances,
-                spending_drawdown_schedule=spending_schedule,
-                secondary_dc_drawdown_age=secondary_dc_drawdown_age,
-                db_pensions=scenario.db_pensions,
-                life_events=scenario.life_events,
-                dc_pots=extra_dc_pots,
-                save_output=False,
-                return_figure=True,
-            )
-
-        elif chart_type == "sequence_of_returns":
-            fig = plot_sequence_of_returns_scenarios(
-                scenario.tax_free_pot,
-                dc_pot,
-                secondary_dc_pot,
-                secondary_dc_drawdown_age,
-                scenario.db_pensions,
-                scenario.start_age,
-                scenario.end_age,
-                scenario.mean_return,
-                scenario.std_return,
-                strategy_fn,
-                withdrawals_required=scenario_withdrawals,
-                life_events=scenario.life_events,
-                spending_drawdown_schedule=spending_schedule,
-                dc_pots=extra_dc_pots,
-                save_output=False,
-                return_figure=True,
-            )
-
-        elif chart_type == "monte_carlo":
-            fig = plot_monte_carlo_fan_chart(
-                scenario.tax_free_pot,
-                dc_pot,
-                secondary_dc_pot,
-                secondary_dc_drawdown_age,
-                scenario.db_pensions,
-                scenario.start_age,
-                scenario.end_age,
-                scenario.mean_return,
-                scenario.std_return,
-                strategy_fn,
-                scenario.num_simulations,
-                scenario.random_seed,
-                withdrawals_required=scenario_withdrawals,
-                life_events=scenario.life_events,
-                spending_drawdown_schedule=spending_schedule,
-                dc_pots=extra_dc_pots,
-                save_output=False,
-                return_figure=True,
-            )
-
-        elif chart_type == "pots_stacked":
-            fig = plot_pots_stacked_area(
-                scenario.tax_free_pot,
-                dc_pot,
-                secondary_dc_pot,
-                secondary_dc_drawdown_age,
-                scenario.db_pensions,
-                scenario.start_age,
-                scenario.end_age,
-                scenario.mean_return,
-                scenario.std_return,
-                strategy_fn,
-                scenario.random_seed,
-                withdrawals_required=scenario_withdrawals,
-                life_events=scenario.life_events,
-                spending_drawdown_schedule=spending_schedule,
-                dc_pots=extra_dc_pots,
-                save_output=False,
-                return_figure=True,
-            )
-
-        elif chart_type == "pots_individual":
-            fig = plot_individual_pots_subplots(
-                scenario.tax_free_pot,
-                dc_pot,
-                secondary_dc_pot,
-                secondary_dc_drawdown_age,
-                scenario.db_pensions,
-                scenario.start_age,
-                scenario.end_age,
-                scenario.mean_return,
-                scenario.std_return,
-                strategy_fn,
-                scenario.random_seed,
-                withdrawals_required=scenario_withdrawals,
-                life_events=scenario.life_events,
-                dc_pots=extra_dc_pots,
-                save_output=False,
-                return_figure=True,
-            )
-
-        if fig is not None:
-            figures.append(fig)
-
-    return figures
-
-
-# ---------------------------------------------------------------------------
-# Session state
-# ---------------------------------------------------------------------------
-
-
-def _init_session_state() -> None:
-    """Initialise Streamlit session state with defaults on first load."""
-    if "chat_messages" not in st.session_state:
-        st.session_state.chat_messages = []
-    if "scenario" not in st.session_state:
-        st.session_state.scenario = _default_scenario()
-    if "welcomed" not in st.session_state:
-        st.session_state.welcomed = False
-
-
-# ---------------------------------------------------------------------------
-# Message rendering
-# ---------------------------------------------------------------------------
-
-
-def _store_message(
-    role: str, content: str, figures: list[Figure] | None = None
-) -> None:
-    """Append a message to the persistent conversation history.
+def _build_sim_response(cache: dict[str, Any]) -> str:
+    """Build a conversational summary of simulation results.
 
     Args:
-        role: ``"user"`` or ``"assistant"``.
-        content: Message text (markdown supported).
-        figures: Optional matplotlib figures to associate with this message.
+        cache: Simulation result cache.
+
+    Returns:
+        Markdown string with plain-English explanation and key metrics.
     """
-    st.session_state.chat_messages.append(
-        {"role": role, "content": content, "figures": figures or []}
+    bm = cache["baseline_metrics"]
+    sm = cache["scenario_metrics"]
+    mc = cache["mc_metrics"]
+    events = cache["life_events"]
+    names = cache["life_event_names"]
+
+    explanation = build_plain_english_explanation(
+        baseline_metrics=bm,
+        scenario_metrics=sm,
+        monte_carlo_metrics=mc,
+        events=events,
+        event_names=names if names else None,
     )
 
-
-def _render_message(
-    role: str, content: str, figures: list[Figure]
-) -> None:
-    """Render one chat message with optional inline charts.
-
-    Args:
-        role: ``"user"`` or ``"assistant"``.
-        content: Message text (markdown supported).
-        figures: Matplotlib figures to display below the text.
-    """
-    with st.chat_message(role):
-        if content:
-            st.markdown(content)
-        for fig in figures:
-            st.pyplot(fig)
+    next_steps = (
+        "\n\n**What to explore next:** Try asking *'What if I need £X at age Y?'*, "
+        "*'Which pot runs out first?'*, or *'What about risk?'*"
+    )
+    return explanation + next_steps
 
 
-def _replay_history() -> None:
-    """Re-render the full conversation history from session state."""
-    for message in st.session_state.chat_messages:
-        _render_message(
-            message["role"],
-            message["content"],
-            message.get("figures", []),
-        )
-
-
-# ---------------------------------------------------------------------------
-# Main app
-# ---------------------------------------------------------------------------
+# ── Main app ───────────────────────────────────────────────────────────────────
 
 
 def main() -> None:
-    """Run the IFA chat-driven Streamlit app."""
-    st.set_page_config(
-        page_title="IFA Pension Chat",
-        page_icon="💬",
-        layout="wide",
-    )
-    st.title("💬 Pension Scenario Explorer")
+    """Render the Streamlit chat-based pension simulator UI."""
+    st.set_page_config(page_title="IFA Pension Chat", layout="wide")
+    st.title("IFA Pension Drawdown Chat")
     st.caption(
-        "Type questions to explore your retirement finances. "
-        "Try *'start over'* to reset or *'show my assumptions'* for a summary."
+        "Ask 'what if' questions about your retirement finances and see the "
+        "answers as charts and plain-English summaries."
     )
 
     _init_session_state()
 
-    if not st.session_state.welcomed:
-        _store_message("assistant", _WELCOME_MESSAGE)
-        st.session_state.welcomed = True
+    # ── Display message history ────────────────────────────────────────────
+    current_version: int = st.session_state.get("sim_version", 0)
+    sim_cache: dict[str, Any] | None = st.session_state.get("sim_cache")
 
-    _replay_history()
+    if not st.session_state["messages"]:
+        with st.chat_message("assistant"):
+            st.markdown(_WELCOME_TEXT)
 
-    user_input = st.chat_input("Ask a question or describe a scenario…")
+    for msg in st.session_state["messages"]:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+            if msg.get("charts") and msg["role"] == "assistant":
+                msg_version: int = msg.get("sim_version", -1)
+                if msg_version == current_version and sim_cache is not None:
+                    _render_charts_from_cache(msg["charts"], sim_cache)
+                else:
+                    st.caption(
+                        "*(Charts from a previous simulation — "
+                        "type 'run' to refresh.)*"
+                    )
+
+    # ── Handle new user input ──────────────────────────────────────────────
+    user_input = st.chat_input("Ask a 'what if' question…")
     if not user_input:
         return
 
-    _store_message("user", user_input)
-    _render_message("user", user_input, [])
+    # Record and display user message
+    st.session_state["messages"].append({"role": "user", "content": user_input})
+    with st.chat_message("user"):
+        st.markdown(user_input)
 
-    scenario: ChatScenario = st.session_state.scenario
-    intent = _parse_intent(user_input, scenario)
+    # Parse intent
+    intent = _parse_message(
+        text=user_input,
+        start_age=st.session_state["start_age"],
+        end_age=st.session_state["end_age"],
+    )
+    action = intent["action"]
 
-    # ------------------------------------------------------------------ reset
-    if intent.reset:
-        st.session_state.scenario = _default_scenario()
-        _store_message("assistant", intent.reply)
-        _render_message("assistant", intent.reply, [])
+    # ── Handle reset ───────────────────────────────────────────────────────
+    if action == "reset":
+        _reset_state()
+        response = (
+            "Everything has been reset to the default scenario. "
+            + _build_scenario_summary()
+            + "\n\nWhat would you like to explore?"
+        )
+        st.session_state["messages"].append(
+            {
+                "role": "assistant",
+                "content": response,
+                "charts": None,
+                "sim_version": None,
+            }
+        )
+        with st.chat_message("assistant"):
+            st.markdown(response)
         return
 
-    # ------------------------------------------------------------ show setup
-    if intent.show_setup:
-        summary = _scenario_summary(scenario)
-        _store_message("assistant", summary)
-        _render_message("assistant", summary, [])
+    # ── Handle help ────────────────────────────────────────────────────────
+    if action == "help":
+        st.session_state["messages"].append(
+            {
+                "role": "assistant",
+                "content": _HELP_TEXT,
+                "charts": None,
+                "sim_version": None,
+            }
+        )
+        with st.chat_message("assistant"):
+            st.markdown(_HELP_TEXT)
         return
 
-    # ---------------------------------------------------- apply state updates
-    if intent.updates:
-        updated_scenario, error = _apply_updates(scenario, intent.updates)
-        if error:
-            err_msg = f"⚠️ {error}"
-            _store_message("assistant", err_msg)
-            _render_message("assistant", err_msg, [])
-            return
-        st.session_state.scenario = updated_scenario
-        scenario = updated_scenario
+    # ── Apply parameter updates ────────────────────────────────────────────
+    param_confirmations = _apply_updates(intent["updates"])
+    event_confirmations = _apply_events(intent["lump_events"], intent["spend_events"])
+    all_confirmations = param_confirmations + event_confirmations
 
-    # ---------------------------------------------- text-only response (no sim)
-    if not intent.run_simulation:
-        if intent.reply:
-            _store_message("assistant", intent.reply)
-            _render_message("assistant", intent.reply, [])
-        return
+    # ── Run simulation if needed ───────────────────────────────────────────
+    charts_to_show: list[str] = intent.get("charts", [])
+    sim_cache = None
 
-    # ---------------------------------------------------- render spinner reply
-    if intent.reply:
-        _store_message("assistant", intent.reply)
-        _render_message("assistant", intent.reply, [])
+    if intent.get("auto_run"):
+        with st.spinner("Running simulation…"):
+            sim_cache = _run_simulation()
 
-    # ------------------------------------------------------ run simulation
-    with st.spinner("Running simulation…"):
-        try:
-            figures = _build_figures(scenario, intent.chart_types)
-            explanation = _build_explanation(scenario)
-        except ValueError as exc:
-            err_msg = f"⚠️ Simulation error: {exc}"
-            _store_message("assistant", err_msg)
-            _render_message("assistant", err_msg, [])
-            return
+    # ── Build response text ────────────────────────────────────────────────
+    parts: list[str] = []
 
-    _store_message("assistant", explanation, figures)
+    if all_confirmations:
+        parts.append("**Updated:**\n" + "\n".join(f"- {c}" for c in all_confirmations))
+
+    if intent.get("auto_run") and sim_cache is None:
+        parts.append(
+            "I couldn't run the simulation — please check that your "
+            "life-event ages are within your start/end age range."
+        )
+        charts_to_show = []
+    elif sim_cache is not None:
+        parts.append(_build_sim_response(sim_cache))
+
+    if action == "unknown" and not all_confirmations:
+        parts.append(
+            "I didn't quite understand that. Type **help** to see what I can do, "
+            "or try *'run simulation'*, *'show pots'*, or describe your situation."
+        )
+
+    if not parts:
+        parts.append(_build_scenario_summary())
+
+    response_text = "\n\n".join(parts)
+
+    # ── Store and display assistant message ───────────────────────────────
+    new_version = st.session_state.get("sim_version", 0)
+    st.session_state["messages"].append(
+        {
+            "role": "assistant",
+            "content": response_text,
+            "charts": charts_to_show if charts_to_show else None,
+            "sim_version": new_version if charts_to_show else None,
+        }
+    )
+
     with st.chat_message("assistant"):
-        for fig in figures:
-            st.pyplot(fig)
-        st.markdown(explanation)
+        st.markdown(response_text)
+        if charts_to_show and sim_cache is not None:
+            _render_charts_from_cache(charts_to_show, sim_cache)
 
 
 if __name__ == "__main__":
