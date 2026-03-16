@@ -1,16 +1,18 @@
 # Architecture (beginner friendly)
 
-This project has two entrypoints:
+This project has three entrypoints:
 
-- **Web app**: `ifa_web.py` (Streamlit UI)
+- **Chat UI**: `ifa_chat.py` (conversational Streamlit interface)
+- **Web app**: `ifa_web.py` (parameter-driven Streamlit dashboard)
 - **CLI**: `pension_drawdown_simulator.py` (command line script)
 
-Both reuse the same core `ifa/` Python package.
+All three reuse the same core `ifa/` Python package.
 
 ## Big picture (data flow)
 
 ```mermaid
 flowchart LR
+  CHAT[ifa_chat.py\nChat UI] --> IN
   UI[ifa_web.py\nStreamlit UI] --> IN[User inputs\npensions, pots, spending, life events]
   IN --> EVENTS[ifa.events\nbuild_required_withdrawals]
   IN --> MARKET[ifa.market\nreturns generation]
@@ -20,12 +22,24 @@ flowchart LR
   ENGINE --> PLOTS[ifa.plotting\nmatplotlib figures]
   METRICS --> UI
   PLOTS --> UI
+  METRICS --> CHAT
+  PLOTS --> CHAT
   EXPLAIN[ifa.explain\nplain English summary] --> UI
+  EXPLAIN --> CHAT
 ```
 
 ## Modules (what each file does)
 
 ### Entrypoints
+- `ifa_chat.py`
+  - Provides a conversational chat interface via `st.chat_input()` /
+    `st.chat_message()`
+  - Parses natural-language questions with rule-based intent matching
+  - Maintains a `ChatScenario` in `st.session_state` and updates it
+    incrementally across turns
+  - Selects relevant charts based on the user's question and renders them
+    inline in the chat alongside plain-English explanations
+
 - `ifa_web.py`
   - Collects inputs from the sidebar
   - Builds a **required withdrawals** schedule (baseline spending + life events - DB)
@@ -79,14 +93,24 @@ This shows the *direction of imports* (higher-level modules import lower-level m
 
 ```mermaid
 flowchart TB
-  IFWEB[ifa_web.py] --> CONFIG[ifa/config.py]
-  IFWEB --> MODELS[ifa/models.py]
-  IFWEB --> EVENTS[ifa/events.py]
-  IFWEB --> ENGINE[ifa/engine.py]
-  IFWEB --> METRICS[ifa/metrics.py]
-  IFWEB --> PLOTTING[ifa/plotting.py]
-  IFWEB --> EXPLAIN[ifa/explain.py]
-  IFWEB --> STRAT[ifa/strategies.py]
+  CHAT[ifa_chat.py] --> CONFIG[ifa/config.py]
+  CHAT --> MODELS[ifa/models.py]
+  CHAT --> EVENTS[ifa/events.py]
+  CHAT --> ENGINE[ifa/engine.py]
+  CHAT --> METRICS[ifa/metrics.py]
+  CHAT --> PLOTTING[ifa/plotting.py]
+  CHAT --> EXPLAIN[ifa/explain.py]
+  CHAT --> STRAT[ifa/strategies.py]
+  CHAT --> MARKET[ifa/market.py]
+
+  IFWEB[ifa_web.py] --> CONFIG
+  IFWEB --> MODELS
+  IFWEB --> EVENTS
+  IFWEB --> ENGINE
+  IFWEB --> METRICS
+  IFWEB --> PLOTTING
+  IFWEB --> EXPLAIN
+  IFWEB --> STRAT
 
   STRAT --> ENGINE
   STRAT --> MODELS
@@ -96,7 +120,7 @@ flowchart TB
   EXPLAIN --> MODELS
   EXPLAIN --> METRICS
 
-  MARKET[ifa/market.py] --> ENGINE
+  MARKET --> ENGINE
 ```
 
 ## One concept to remember (for beginners)

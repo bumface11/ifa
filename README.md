@@ -71,6 +71,38 @@ remains available for fine-grained control.
 - Import and dependency diagrams: `docs/DEPENDENCIES.md`
 
 
+## Chat Interface
+
+`ifa_chat.py` provides a conversational "what if" experience alongside the
+existing dashboard.  Instead of configuring parameters in a sidebar, you type
+natural-language questions and the app parses your intent, updates the
+scenario, runs the simulation, and renders the relevant charts inline.
+
+Example questions you can ask:
+
+- *"I'm 55"* — set your current age
+- *"Retire at 60"* — change the DC pot drawdown start age
+- *"DC pot £300,000"* — update your pension pot balance
+- *"DB pension £8,000/year from age 66"* — add a defined-benefit stream
+- *"House repairs £18,000 at age 70"* — add a one-off event
+- *"Care costs £6,000/year from age 80"* — add an ongoing spending step
+- *"Run it"* / *"Show me"* — simulate and display charts with explanation
+- *"Show me which pot drains first"* — pot breakdown view
+- *"What if markets crash early?"* — sequence-of-returns chart
+- *"How worried should I be?"* — Monte Carlo fan chart
+- *"Show my assumptions"* — display current scenario setup
+- *"Start over"* — reset to defaults
+
+Run it with:
+
+```bash
+streamlit run ifa_chat.py
+```
+
+The `ifa/` package is unchanged — `ifa_chat.py` is a thin conversational UI
+layer that calls the same engine, events, metrics, explain, and plotting
+functions used by `ifa_web.py`.
+
 ## Life Events
 
 Life events model real-world spending changes in simple terms:

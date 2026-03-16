@@ -1,6 +1,6 @@
 # Start Here
 
-This project has two ways to run the simulator.
+This project has three ways to run the simulator.
 
 ## 1) Command-Line Version
 
@@ -12,9 +12,9 @@ uv run python pension_drawdown_simulator.py
 
 Outputs are written to `output/`.
 
-## 2) Streamlit Version
+## 2) Streamlit Dashboard
 
-Use this when you want interactive controls for assumptions and life events.
+Use this when you want interactive sidebar controls for assumptions and life events.
 
 ```bash
 uv run streamlit run ifa_web.py
