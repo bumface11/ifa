@@ -59,6 +59,9 @@ The same simulation pipeline is used by both CLI and Streamlit.
 7. Optionally persist or restore sidebar parameters via local presets.
 8. Preset selection auto-loads state; if unsaved changes exist, UI asks for
     confirmation before replacing current inputs.
+9. On run, the UI snapshots the current sidebar state plus any selected saved
+    comparison presets, then renders the current scenario and comparison
+    panels from the same simulation pipeline.
 
 ```mermaid
 flowchart LR
@@ -85,3 +88,5 @@ flowchart LR
 - Preset persistence logic stays separate in `ifa/presets.py`, while
     interaction rules (auto-load and unsaved-change confirmation) live in
     `ifa_web.py`.
+- `ifa_web.py` also normalizes saved preset state back into simulation inputs
+    so current inputs and comparison presets share the same rendering path.

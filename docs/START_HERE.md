@@ -34,6 +34,12 @@ In the web app:
 - Selecting a preset from the list loads it automatically.
 - If current inputs differ from the loaded preset, switching presets prompts
   you before loading so unsaved edits are not lost accidentally.
+- Use `Display mode` to switch between the editable current-inputs view and a
+  compare-only saved-preset view.
+- Use `Preset Comparison` in the sidebar to choose up to three saved presets
+  for a comparison workspace.
+- Pick `Side by side` on larger screens, or `Focus one preset` on smaller
+  screens when you want to inspect one preset output at a time.
 - Click `Run simulation` to refresh metrics, explanations, and charts.
 - Optionally enable PNG saving in the sidebar.
 
