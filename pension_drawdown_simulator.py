@@ -29,7 +29,11 @@ from ifa.engine import (
     run_monte_carlo_simulation,
     simulate_multi_pot_pension_path,
 )
-from ifa.events import build_required_withdrawals, build_spending_drawdown_schedule
+from ifa.events import (
+    build_annual_spending_schedule,
+    build_required_withdrawals,
+    build_spending_drawdown_schedule,
+)
 from ifa.market import generate_random_returns
 from ifa.metrics import summarize_monte_carlo, summarize_path
 from ifa.models import LifeEvent, LumpSumEvent, SpendingStepEvent
@@ -259,6 +263,12 @@ def main() -> None:
         baseline_spending=BASELINE_SPENDING,
         events=SCENARIO_EVENTS,
     )
+    ages = np.arange(START_AGE, END_AGE + 1, dtype=np.int_)
+    scenario_annual_spending = build_annual_spending_schedule(
+        ages=ages,
+        baseline_spending=BASELINE_SPENDING,
+        events=SCENARIO_EVENTS,
+    )
     plot_sequence_of_returns_scenarios(
         INITIAL_TAX_FREE_POT,
         float(DC_POTS[0][1]),
@@ -380,6 +390,7 @@ def main() -> None:
         RANDOM_SEED,
         withdrawals_required=scenario_required,
         life_events=SCENARIO_EVENTS,
+        annual_spending_schedule=scenario_annual_spending,
         dc_pots=DC_POTS,
         output_file=output_dir / "pots_individual.png",
     )

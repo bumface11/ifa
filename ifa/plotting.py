@@ -438,6 +438,7 @@ def plot_individual_pots_subplots(
     seed: int,
     withdrawals_required: np.ndarray | None = None,
     life_events: Sequence[LifeEvent] = (),
+    annual_spending_schedule: np.ndarray | None = None,
     dc_pots: Sequence[DcPotInput] | None = None,
     dc_pot_names: Sequence[str] | None = None,
     db_pension_names: Sequence[str] | None = None,
@@ -529,6 +530,7 @@ def plot_individual_pots_subplots(
     _apply_numeric_text_scale(ax)
 
     ax = axes[1, 1]
+    annual_spending_label = "Annual spending"
     ax.step(
         ages,
         db_income,
@@ -538,11 +540,42 @@ def plot_individual_pots_subplots(
         where="post",
     )
     ax.fill_between(ages, 0, db_income, step="post", alpha=0.2, color="#E74C3C")
-    ax.set_title("DB Pension Income Timeline", fontsize=12, fontweight="bold")
+    if annual_spending_schedule is not None:
+        if annual_spending_schedule.shape[0] != ages.shape[0]:
+            raise ValueError(
+                "annual_spending_schedule length must match ages length; "
+                f"got {annual_spending_schedule.shape[0]} and {ages.shape[0]}"
+            )
+
+        ax.step(
+            ages,
+            annual_spending_schedule,
+            linewidth=2.5,
+            color="#1D4ED8",
+            linestyle="--",
+            label=annual_spending_label,
+            where="post",
+        )
+        ax.fill_between(
+            ages,
+            db_income,
+            annual_spending_schedule,
+            where=annual_spending_schedule >= db_income,
+            step="post",
+            alpha=0.18,
+            color="#F59E0B",
+            label="Needed from pots",
+        )
+
+    ax.set_title(
+        "Annual Spending vs DB Income",
+        fontsize=12,
+        fontweight="bold",
+    )
     ax.set_xlabel("Age", fontsize=11, fontweight="bold")
-    ax.set_ylabel("Annual DB Income (£)", fontsize=11, fontweight="bold")
+    ax.set_ylabel("Annual Amount (£)", fontsize=11, fontweight="bold")
     ax.grid(True, alpha=0.3)
-    ax.legend(fontsize=10, loc="upper left")
+    ax.legend(fontsize=10, loc="lower right")
     ax.yaxis.set_major_formatter(
         plt.FuncFormatter(lambda value, _: f"£{value / 1000:.0f}k")
     )
@@ -550,7 +583,7 @@ def plot_individual_pots_subplots(
 
     fig.suptitle(
         "Individual Pension Pots Evolution\n"
-        "(combined DC view, dedicated DB income panel; "
+        "(combined DC view, annual spending vs DB income panel; "
         f"{'life events active' if len(life_events) > 0 else 'no life events'})",
         fontsize=14,
         fontweight="bold",

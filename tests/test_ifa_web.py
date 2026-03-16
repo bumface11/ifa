@@ -6,7 +6,11 @@ from pathlib import Path
 
 from ifa.models import LumpSumEvent, SpendingStepEvent
 from ifa.presets import save_preset
-from ifa_web import _build_simulation_inputs_from_state, _capture_comparison_snapshots
+from ifa_web import (
+    _build_simulation_inputs_from_state,
+    _capture_comparison_snapshots,
+    _sanitize_compare_preset_selection,
+)
 
 
 def test_build_simulation_inputs_from_state_reconstructs_saved_values() -> None:
@@ -91,3 +95,17 @@ def test_capture_comparison_snapshots_loads_selected_presets(tmp_path: Path) -> 
     assert [label for label, _ in snapshots] == ["Beta Plan", "Alpha Plan"]
     assert snapshots[0][1]["start_age_input"] == 60
     assert snapshots[1][1]["start_age_input"] == 55
+
+
+def test_sanitize_compare_preset_selection_filters_missing_and_duplicate() -> None:
+    """Comparison defaults should drop stale and duplicate preset names."""
+    selection = ["Alpha", "Missing", "Alpha", 123, "Beta"]
+
+    sanitized = _sanitize_compare_preset_selection(selection, ["Alpha", "Beta"])
+
+    assert sanitized == ["Alpha", "Beta"]
+
+
+def test_sanitize_compare_preset_selection_handles_non_list() -> None:
+    """Unexpected session-state types should degrade to an empty selection."""
+    assert _sanitize_compare_preset_selection("Alpha", ["Alpha"]) == []

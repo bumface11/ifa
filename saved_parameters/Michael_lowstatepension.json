@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "name": "Michael_basic",
-  "saved_at": "2026-03-11T21:46:49.153367+00:00",
+  "name": "Michael_lowstatepension",
+  "saved_at": "2026-03-16T09:01:38.269533+00:00",
   "sidebar_state": {
     "start_age_input": 52,
     "end_age_input": 95,
@@ -27,7 +27,7 @@
     "db_amount_0": 12510.0,
     "db_name_1": "State pension",
     "db_age_1": 67,
-    "db_amount_1": 11900.0,
+    "db_amount_1": 1900.0,
     "db_name_2": "CG DB",
     "db_age_2": 60,
     "db_amount_2": 6900.0,

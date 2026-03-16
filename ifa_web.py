@@ -31,7 +31,11 @@ from ifa.engine import (
     run_monte_carlo_simulation,
     simulate_multi_pot_pension_path,
 )
-from ifa.events import build_required_withdrawals, build_spending_drawdown_schedule
+from ifa.events import (
+    build_annual_spending_schedule,
+    build_required_withdrawals,
+    build_spending_drawdown_schedule,
+)
 from ifa.explain import build_plain_english_explanation
 from ifa.metrics import (
     MonteCarloMetrics,
@@ -164,6 +168,50 @@ def _apply_pending_sidebar_updates() -> None:
         st.session_state["preset_name_input"] = pending_name
 
 
+def _sanitize_compare_preset_selection(
+    selection: object,
+    available_options: Sequence[str],
+) -> list[str]:
+    """Return comparison preset selections that still exist in the preset list."""
+    if not isinstance(selection, list):
+        return []
+
+    available_set = set(available_options)
+    sanitized: list[str] = []
+    for value in selection:
+        if not isinstance(value, str):
+            continue
+        if value not in available_set or value in sanitized:
+            continue
+        sanitized.append(value)
+    return sanitized
+
+
+def _replace_compare_preset_selection(old_stem: str, new_stem: str) -> None:
+    """Replace a renamed preset inside the comparison selection list."""
+    current = _sanitize_compare_preset_selection(
+        st.session_state.get("compare_preset_selection", []),
+        [*st.session_state.get("compare_preset_selection", [])],
+    )
+    updated = [new_stem if value == old_stem else value for value in current]
+    deduped: list[str] = []
+    for value in updated:
+        if value not in deduped:
+            deduped.append(value)
+    st.session_state["compare_preset_selection"] = deduped
+
+
+def _remove_compare_preset_selection(stem: str) -> None:
+    """Remove a deleted preset from the comparison selection list."""
+    current = st.session_state.get("compare_preset_selection", [])
+    if not isinstance(current, list):
+        st.session_state["compare_preset_selection"] = []
+        return
+    st.session_state["compare_preset_selection"] = [
+        value for value in current if isinstance(value, str) and value != stem
+    ]
+
+
 
 def _execute_preset_action(
     action: str,
@@ -197,6 +245,7 @@ def _execute_preset_action(
             saved_path = save_preset(preset_dir, save_name, current_state)
             if old_stem != new_stem and old_stem in preset_map:
                 delete_preset(preset_map[old_stem])
+                _replace_compare_preset_selection(old_stem, new_stem)
         else:
             save_name = preset_name or build_default_preset_name()
             saved_path = save_preset(preset_dir, save_name, current_state)
@@ -223,6 +272,7 @@ def _execute_preset_action(
             st.session_state["_preset_notice"] = "Choose a preset before deleting."
             return
         delete_preset(preset_map[selected_preset])
+        _remove_compare_preset_selection(selected_preset)
         st.session_state.pop("_last_loaded_preset_name", None)
         st.session_state.pop("_last_loaded_preset_state", None)
         st.session_state["_pending_preset_selected"] = "(none)"
@@ -888,6 +938,11 @@ def _run_simulation_panel(
         db_income=db_income,
         events=inputs.life_events,
     )
+    annual_spending_schedule = build_annual_spending_schedule(
+        ages=ages,
+        baseline_spending=inputs.baseline_spending,
+        events=inputs.life_events,
+    )
 
     years = inputs.end_age - inputs.start_age
     returns = (
@@ -1051,6 +1106,7 @@ def _run_simulation_panel(
         seed=inputs.random_seed,
         withdrawals_required=scenario_required,
         life_events=inputs.life_events,
+        annual_spending_schedule=annual_spending_schedule,
         dc_pots=inputs.dc_pots,
         dc_pot_names=inputs.dc_pot_names,
         db_pension_names=inputs.db_pension_names,
@@ -1273,6 +1329,11 @@ def main() -> None:
     preset_files = list_preset_files(preset_dir)
     preset_map = {preset_path.stem: preset_path for preset_path in preset_files}
     preset_options = ["(none)", *preset_map.keys()]
+    compare_selection = _sanitize_compare_preset_selection(
+        st.session_state.get("compare_preset_selection", []),
+        list(preset_map.keys()),
+    )
+    st.session_state["compare_preset_selection"] = compare_selection
     if st.session_state.get("preset_selected") not in preset_options:
         st.session_state["preset_selected"] = "(none)"
 
@@ -1376,7 +1437,7 @@ def main() -> None:
     selected_compare_presets = st.sidebar.multiselect(
         "Saved presets to compare",
         options=list(preset_map.keys()),
-        default=st.session_state.get("compare_preset_selection", []),
+        default=compare_selection,
         max_selections=3,
         key="compare_preset_selection",
         help="Choose up to three saved presets for the comparison workspace.",
