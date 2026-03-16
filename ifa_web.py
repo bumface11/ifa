@@ -16,14 +16,15 @@ from numpy.typing import NDArray
 
 from ifa.config import (
     DB_PENSIONS,
+    DRAWDOWN_START_AGE,
     DC_POTS,
     END_AGE,
     INITIAL_DC_POT,
     INITIAL_TAX_FREE_POT,
     MEAN_RETURN,
+    MODEL_START_AGE,
     NUM_SIMULATIONS,
     RANDOM_SEED,
-    START_AGE,
     STD_RETURN,
 )
 from ifa.engine import (
@@ -63,7 +64,8 @@ from ifa.presets import (
 from ifa.strategies import create_fixed_real_drawdown_strategy
 
 _TRACKED_STATIC_KEYS: tuple[str, ...] = (
-    "start_age_input",
+    "model_start_age_input",
+    "drawdown_start_age_input",
     "end_age_input",
     "tax_free_pot_input",
     "baseline_spending_input",
@@ -89,6 +91,7 @@ class SimulationInputs:
 
     label: str
     start_age: int
+    drawdown_start_age: int
     end_age: int
     tax_free_pot: float
     baseline_spending: float
@@ -127,7 +130,8 @@ class SimulationResults:
 def _ensure_sidebar_defaults() -> None:
     """Initialize sidebar widget defaults in session state once."""
     defaults: dict[str, int | float | bool | str] = {
-        "start_age_input": START_AGE,
+        "model_start_age_input": MODEL_START_AGE,
+        "drawdown_start_age_input": DRAWDOWN_START_AGE,
         "end_age_input": END_AGE,
         "tax_free_pot_input": float(INITIAL_TAX_FREE_POT),
         "baseline_spending_input": 30_000.0,
@@ -393,7 +397,7 @@ def _build_db_income(
 
 
 def _build_dc_pots(
-    start_age: int,
+    drawdown_floor_age: int,
     end_age: int,
 ) -> tuple[list[tuple[int, float]], list[str]]:
     """Collect DC pot balances, names, and drawdown start ages."""
@@ -420,7 +424,7 @@ def _build_dc_pots(
             default_start_age = 57
             default_balance = float(INITIAL_DC_POT)
         else:
-            default_start_age = max(start_age, 57)
+            default_start_age = max(drawdown_floor_age, 57)
             default_balance = 0.0
 
         pot_name = st.text_input(
@@ -429,12 +433,12 @@ def _build_dc_pots(
             key=f"dc_name_{index}",
             help="Default name can be edited to anything you prefer.",
         )
-        drawdown_start_age = int(
+        pot_drawdown_start_age = int(
             st.number_input(
                 f"DC pot #{index + 1} drawdown start age",
-                min_value=start_age,
+                min_value=drawdown_floor_age,
                 max_value=end_age,
-                value=min(max(default_start_age, start_age), end_age),
+                value=min(max(default_start_age, drawdown_floor_age), end_age),
                 key=f"dc_start_age_{index}",
                 help="This pot can only be used for withdrawals from this age onward.",
             )
@@ -448,14 +452,14 @@ def _build_dc_pots(
                 key=f"dc_initial_balance_{index}",
             )
         )
-        pots.append((drawdown_start_age, initial_balance))
+        pots.append((pot_drawdown_start_age, initial_balance))
         pot_names.append(pot_name.strip() or f"DC Pot {index + 1}")
 
     return pots, pot_names
 
 
 def _build_life_events(
-    start_age: int,
+    model_start_age: int,
     end_age: int,
 ) -> tuple[tuple[LifeEvent, ...], list[str]]:
     """Collect life events from active Streamlit container inputs."""
@@ -484,9 +488,9 @@ def _build_life_events(
         lump_age = int(
             st.number_input(
                 f"Age (lump #{index + 1})",
-                min_value=start_age,
+                min_value=model_start_age,
                 max_value=end_age,
-                value=min(start_age + 3 + index, end_age),
+                value=min(model_start_age + 3 + index, end_age),
                 key=f"lump_age_{index}",
                 help="The age when this one-off cost happens.",
             )
@@ -526,9 +530,9 @@ def _build_life_events(
         step_start = int(
             st.number_input(
                 f"Start age (step #{index + 1})",
-                min_value=start_age,
+                min_value=model_start_age,
                 max_value=end_age,
-                value=min(start_age + 10 + index, end_age),
+                value=min(model_start_age + 10 + index, end_age),
                 key=f"step_start_{index}",
                 help="The age when this ongoing extra cost starts.",
             )
@@ -578,7 +582,7 @@ def _build_life_events(
 
 
 def _build_db_pensions(
-    start_age: int,
+    model_start_age: int,
     end_age: int,
 ) -> tuple[list[tuple[int, float]], list[str]]:
     """Collect DB pension inputs and names from the active container."""
@@ -597,7 +601,9 @@ def _build_db_pensions(
     pensions: list[tuple[int, float]] = []
     pension_names: list[str] = []
     for index in range(stream_count):
-        default_age = DB_PENSIONS[index][0] if index < default_streams else start_age
+        default_age = (
+            DB_PENSIONS[index][0] if index < default_streams else model_start_age
+        )
         default_amount = DB_PENSIONS[index][1] if index < default_streams else 10_000.0
         pension_name = st.text_input(
             f"DB stream name #{index + 1}",
@@ -608,7 +614,7 @@ def _build_db_pensions(
         stream_age = int(
             st.number_input(
                 f"DB start age #{index + 1}",
-                min_value=start_age,
+                min_value=model_start_age,
                 max_value=end_age,
                 value=default_age,
                 key=f"db_age_{index}",
@@ -694,17 +700,23 @@ def _build_simulation_inputs_from_state(
     label: str,
 ) -> SimulationInputs:
     """Build normalized simulation inputs from tracked sidebar state."""
-    start_age = _coerce_int(
-        state.get("start_age_input"),
-        START_AGE,
+    model_start_age = _coerce_int(
+        state.get("model_start_age_input"),
+        _coerce_int(state.get("start_age_input"), MODEL_START_AGE),
         minimum=40,
         maximum=85,
     )
     end_age = _coerce_int(
         state.get("end_age_input"),
         END_AGE,
-        minimum=start_age + 5,
+        minimum=model_start_age + 5,
         maximum=110,
+    )
+    drawdown_start_age = _coerce_int(
+        state.get("drawdown_start_age_input"),
+        _coerce_int(state.get("start_age_input"), DRAWDOWN_START_AGE),
+        minimum=model_start_age,
+        maximum=end_age,
     )
     tax_free_pot = _coerce_float(
         state.get("tax_free_pot_input"),
@@ -753,7 +765,7 @@ def _build_simulation_inputs_from_state(
             default_start_age = 57
             default_balance = float(INITIAL_DC_POT)
         else:
-            default_start_age = max(start_age, 57)
+            default_start_age = max(drawdown_start_age, 57)
             default_balance = 0.0
 
         dc_pot_names.append(
@@ -763,8 +775,8 @@ def _build_simulation_inputs_from_state(
             (
                 _coerce_int(
                     state.get(f"dc_start_age_{index}"),
-                    min(max(default_start_age, start_age), end_age),
-                    minimum=start_age,
+                    min(max(default_start_age, drawdown_start_age), end_age),
+                    minimum=drawdown_start_age,
                     maximum=end_age,
                 ),
                 _coerce_float(
@@ -785,7 +797,11 @@ def _build_simulation_inputs_from_state(
     db_pensions: list[tuple[int, float]] = []
     db_pension_names: list[str] = []
     for index in range(db_count):
-        default_age = DB_PENSIONS[index][0] if index < default_db_count else start_age
+        default_age = (
+            DB_PENSIONS[index][0]
+            if index < default_db_count
+            else model_start_age
+        )
         default_amount = DB_PENSIONS[index][1] if index < default_db_count else 10_000.0
         db_pension_names.append(
             _coerce_str(state.get(f"db_name_{index}"), f"DB Pension {index + 1}")
@@ -795,7 +811,7 @@ def _build_simulation_inputs_from_state(
                 _coerce_int(
                     state.get(f"db_age_{index}"),
                     default_age,
-                    minimum=start_age,
+                    minimum=model_start_age,
                     maximum=end_age,
                 ),
                 _coerce_float(
@@ -821,8 +837,8 @@ def _build_simulation_inputs_from_state(
             continue
         age = _coerce_int(
             state.get(f"lump_age_{index}"),
-            min(start_age + 3 + index, end_age),
-            minimum=start_age,
+            min(model_start_age + 3 + index, end_age),
+            minimum=model_start_age,
             maximum=end_age,
         )
         life_events.append(LumpSumEvent(age=age, amount=amount))
@@ -840,8 +856,8 @@ def _build_simulation_inputs_from_state(
             continue
         step_start = _coerce_int(
             state.get(f"step_start_{index}"),
-            min(start_age + 10 + index, end_age),
-            minimum=start_age,
+            min(model_start_age + 10 + index, end_age),
+            minimum=model_start_age,
             maximum=end_age,
         )
         has_end = _coerce_bool(state.get(f"step_has_end_{index}"), False)
@@ -869,7 +885,8 @@ def _build_simulation_inputs_from_state(
 
     return SimulationInputs(
         label=label.strip() or "Preset",
-        start_age=start_age,
+        start_age=model_start_age,
+        drawdown_start_age=drawdown_start_age,
         end_age=end_age,
         tax_free_pot=tax_free_pot,
         baseline_spending=baseline_spending,
@@ -938,6 +955,10 @@ def _run_simulation_panel(
         db_income=db_income,
         events=inputs.life_events,
     )
+    pre_drawdown_mask = ages < inputs.drawdown_start_age
+    baseline_required[pre_drawdown_mask] = 0.0
+    scenario_required[pre_drawdown_mask] = 0.0
+    spending_drawdown_schedule[pre_drawdown_mask] = 0.0
     annual_spending_schedule = build_annual_spending_schedule(
         ages=ages,
         baseline_spending=inputs.baseline_spending,
@@ -1138,6 +1159,7 @@ def _format_panel_caption(inputs: SimulationInputs) -> str:
     """Build a short caption describing the assumptions for one panel."""
     return (
         f"Ages {inputs.start_age}-{inputs.end_age} | "
+        f"Drawdown from {inputs.drawdown_start_age} | "
         f"Spending £{inputs.baseline_spending:,.0f} | "
         f"Mean {inputs.mean_return * 100:.1f}% | "
         f"Vol {inputs.std_return * 100:.1f}%"
@@ -1444,22 +1466,36 @@ def main() -> None:
     )
 
     st.sidebar.header("Core Inputs")
-    start_age = int(
+    model_start_age = int(
         st.sidebar.number_input(
-            "Start age",
+            "Model start age",
             min_value=40,
             max_value=85,
-            value=START_AGE,
-            key="start_age_input",
+            value=MODEL_START_AGE,
+            key="model_start_age_input",
+            help="The first age included in the projection timeline.",
         )
     )
     end_age = int(
         st.sidebar.number_input(
             "End age",
-            min_value=start_age + 5,
+            min_value=model_start_age + 5,
             max_value=110,
             value=END_AGE,
             key="end_age_input",
+        )
+    )
+    drawdown_start_age = int(
+        st.sidebar.number_input(
+            "Drawdown start age",
+            min_value=model_start_age,
+            max_value=end_age,
+            value=min(max(DRAWDOWN_START_AGE, model_start_age), end_age),
+            key="drawdown_start_age_input",
+            help=(
+                "Withdrawals are forced to zero before this age, so pots only "
+                "grow (or fall) with market returns during the gap."
+            ),
         )
     )
 
@@ -1540,13 +1576,16 @@ def main() -> None:
     )
 
     with st.sidebar.expander("DC Pot Inputs", expanded=False):
-        dc_pots, dc_pot_names = _build_dc_pots(start_age, end_age)
+        dc_pots, dc_pot_names = _build_dc_pots(
+            drawdown_floor_age=drawdown_start_age,
+            end_age=end_age,
+        )
 
     with st.sidebar.expander("DB Pension Inputs", expanded=False):
-        db_pensions, db_pension_names = _build_db_pensions(start_age, end_age)
+        db_pensions, db_pension_names = _build_db_pensions(model_start_age, end_age)
 
     with st.sidebar.expander("Life Event Inputs", expanded=False):
-        life_events, life_event_names = _build_life_events(start_age, end_age)
+        life_events, life_event_names = _build_life_events(model_start_age, end_age)
 
     pending_preset_action = st.session_state.pop("_pending_preset_action", None)
     if isinstance(pending_preset_action, str):

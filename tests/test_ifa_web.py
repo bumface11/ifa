@@ -16,7 +16,8 @@ from ifa_web import (
 def test_build_simulation_inputs_from_state_reconstructs_saved_values() -> None:
     """Saved sidebar state should rebuild the matching simulation inputs."""
     state: dict[str, str | int | float | bool | None] = {
-        "start_age_input": 56,
+        "model_start_age_input": 56,
+        "drawdown_start_age_input": 58,
         "end_age_input": 92,
         "tax_free_pot_input": 120_000.0,
         "baseline_spending_input": 34_000.0,
@@ -51,8 +52,9 @@ def test_build_simulation_inputs_from_state_reconstructs_saved_values() -> None:
 
     assert inputs.label == "Compare Me"
     assert inputs.start_age == 56
+    assert inputs.drawdown_start_age == 58
     assert inputs.end_age == 92
-    assert inputs.dc_pots == ((57, 420_000.0), (67, 80_000.0))
+    assert inputs.dc_pots == ((58, 420_000.0), (67, 80_000.0))
     assert inputs.dc_pot_names == ("Main SIPP", "Late Pot")
     assert inputs.db_pensions == ((65, 14_500.0),)
     assert inputs.db_pension_names == ("Teacher Pension",)
@@ -66,7 +68,8 @@ def test_build_simulation_inputs_from_state_reconstructs_saved_values() -> None:
 def test_build_simulation_inputs_from_state_clamps_invalid_ages() -> None:
     """Invalid saved age ranges should be normalized into safe bounds."""
     state: dict[str, str | int | float | bool | None] = {
-        "start_age_input": 84,
+        "model_start_age_input": 84,
+        "drawdown_start_age_input": 95,
         "end_age_input": 70,
         "dc_pot_count": 1,
         "dc_start_age_0": 120,
@@ -80,6 +83,7 @@ def test_build_simulation_inputs_from_state_clamps_invalid_ages() -> None:
 
     assert inputs.start_age == 84
     assert inputs.end_age == 89
+    assert inputs.drawdown_start_age == 89
     assert inputs.dc_pots[0][0] == 89
     assert inputs.life_events == (LumpSumEvent(age=84, amount=10_000.0),)
 
@@ -93,8 +97,10 @@ def test_capture_comparison_snapshots_loads_selected_presets(tmp_path: Path) -> 
     snapshots = _capture_comparison_snapshots([beta.stem, alpha.stem], preset_map)
 
     assert [label for label, _ in snapshots] == ["Beta Plan", "Alpha Plan"]
-    assert snapshots[0][1]["start_age_input"] == 60
-    assert snapshots[1][1]["start_age_input"] == 55
+    assert snapshots[0][1]["drawdown_start_age_input"] == 60
+    assert snapshots[0][1]["model_start_age_input"] == 59
+    assert snapshots[1][1]["drawdown_start_age_input"] == 55
+    assert snapshots[1][1]["model_start_age_input"] == 54
 
 
 def test_sanitize_compare_preset_selection_filters_missing_and_duplicate() -> None:

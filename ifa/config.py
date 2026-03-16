@@ -20,7 +20,10 @@ DB_PENSIONS: Final[list[tuple[int, float]]] = [
     (67, 11_900),
 ]
 
-START_AGE: Final[int] = 52
+DRAWDOWN_START_AGE: Final[int] = 52
+MODEL_START_AGE: Final[int] = DRAWDOWN_START_AGE - 1
+# Backward compatibility for code paths that still import START_AGE.
+START_AGE: Final[int] = DRAWDOWN_START_AGE
 END_AGE: Final[int] = 95
 
 MEAN_RETURN: Final[float] = 0.04

@@ -103,6 +103,17 @@ The `ifa/` package is unchanged — `ifa_chat.py` is a thin conversational UI
 layer that calls the same engine, events, metrics, explain, and plotting
 functions used by `ifa_web.py`.
 
+## Age Inputs
+
+In the Streamlit dashboard, ages are now split into two controls:
+
+- `Model start age`: first age shown in the timeline.
+- `Drawdown start age`: first age when withdrawals are allowed.
+
+Withdrawals are forced to zero between model start age and drawdown start age,
+so this period represents pre-retirement accumulation (with market movement but
+no spending drawdown).
+
 ## Life Events
 
 Life events model real-world spending changes in simple terms:

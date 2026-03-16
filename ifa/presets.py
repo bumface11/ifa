@@ -13,6 +13,7 @@ JsonMap: TypeAlias = dict[str, JsonScalar]
 
 _PRESET_VERSION = 1
 UTC_TZ = getattr(datetime, "UTC", timezone.utc)  # noqa: UP017
+UTF8_BOM = b"\xef\xbb\xbf"
 
 
 def _write_payload_atomic(target_path: Path, payload: dict[str, object]) -> None:
@@ -20,6 +21,30 @@ def _write_payload_atomic(target_path: Path, payload: dict[str, object]) -> None
     temp_path = target_path.with_suffix(f"{target_path.suffix}.tmp")
     temp_path.write_bytes(orjson.dumps(payload, option=orjson.OPT_INDENT_2))
     temp_path.replace(target_path)
+
+
+def _load_payload(preset_path: Path) -> dict[str, object]:
+    """Load a preset JSON object, tolerating an optional UTF-8 BOM.
+
+    Args:
+        preset_path: Path to a preset file.
+
+    Returns:
+        Parsed JSON object.
+
+    Raises:
+        ValueError: If the payload is not a JSON object.
+        orjson.JSONDecodeError: If JSON is invalid.
+        OSError: If the file cannot be read.
+    """
+    payload_bytes = preset_path.read_bytes()
+    if payload_bytes.startswith(UTF8_BOM):
+        payload_bytes = payload_bytes[len(UTF8_BOM) :]
+
+    payload = orjson.loads(payload_bytes)
+    if not isinstance(payload, dict):
+        raise ValueError("Preset payload must be an object")
+    return payload
 
 
 def build_default_preset_name(now: datetime | None = None) -> str:
@@ -109,9 +134,7 @@ def load_preset(preset_path: Path) -> tuple[str, JsonMap]:
     Raises:
         ValueError: If the file is missing required keys.
     """
-    payload = orjson.loads(preset_path.read_bytes())
-    if not isinstance(payload, dict):
-        raise ValueError("Preset payload must be an object")
+    payload = _load_payload(preset_path)
 
     if "name" not in payload or "sidebar_state" not in payload:
         raise ValueError("Preset file missing required keys: name/sidebar_state")
@@ -128,19 +151,32 @@ def load_preset(preset_path: Path) -> tuple[str, JsonMap]:
         elif isinstance(key, str) and value is None:
             normalized_state[key] = None
 
+    # Backward-compatible migration from old single-age presets.
+    legacy_start_age = normalized_state.pop("start_age_input", None)
+    if "drawdown_start_age_input" not in normalized_state:
+        if isinstance(legacy_start_age, int):
+            normalized_state["drawdown_start_age_input"] = legacy_start_age
+        elif isinstance(legacy_start_age, float):
+            normalized_state["drawdown_start_age_input"] = int(legacy_start_age)
+
+    drawdown_age = normalized_state.get("drawdown_start_age_input")
+    if "model_start_age_input" not in normalized_state and isinstance(
+        drawdown_age, (int, float)
+    ):
+        normalized_state["model_start_age_input"] = int(drawdown_age) - 1
+
     return name, normalized_state
 
 
 def get_preset_saved_at(preset_path: Path) -> str | None:
     """Return ISO saved timestamp from preset payload, if present."""
     try:
-        payload = orjson.loads(preset_path.read_bytes())
+        payload = _load_payload(preset_path)
     except OSError:
         return None
-    except orjson.JSONDecodeError:
+    except ValueError:
         return None
-
-    if not isinstance(payload, dict):
+    except orjson.JSONDecodeError:
         return None
 
     saved_at = payload.get("saved_at")
