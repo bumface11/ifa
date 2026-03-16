@@ -646,17 +646,17 @@ def _build_db_income(
 
 def _scenario_engine_params(
     scenario: ChatScenario,
-) -> tuple[float, float, float, int | None, list[tuple[int, float]] | None]:
-    """Extract engine parameters from a scenario.
+) -> tuple[float, float, int | None, list[tuple[int, float]] | None]:
+    """Extract DC pot engine parameters from a scenario.
 
     Args:
         scenario: Current scenario state.
 
     Returns:
         Tuple of ``(dc_pot, secondary_dc_pot, secondary_dc_drawdown_age,
-        extra_dc_pots)``.  ``extra_dc_pots`` is ``None`` when there are fewer
-        than three pots; the engine then uses the individual pot parameters.
-        Actually returns 5 values including tax_free_pot for convenience.
+        extra_dc_pots)``.  ``extra_dc_pots`` is the full DC pots list when
+        there are two or more pots (so individual drawdown ages are preserved),
+        or ``None`` when there is only one pot.
     """
     dc_pot = scenario.dc_pots[0][1] if scenario.dc_pots else 0.0
     secondary_dc_pot = (
@@ -1068,7 +1068,7 @@ def main() -> None:
         try:
             figures = _build_figures(scenario, intent.chart_types)
             explanation = _build_explanation(scenario)
-        except (ValueError, Exception) as exc:  # noqa: BLE001
+        except ValueError as exc:
             err_msg = f"⚠️ Simulation error: {exc}"
             _store_message("assistant", err_msg)
             _render_message("assistant", err_msg, [])
