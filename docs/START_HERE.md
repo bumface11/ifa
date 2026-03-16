@@ -37,7 +37,31 @@ In the web app:
 - Click `Run simulation` to refresh metrics, explanations, and charts.
 - Optionally enable PNG saving in the sidebar.
 
-## Concept Notes
+## 3) Chat UI Version
+
+Use this when you want to explore scenarios through natural-language "what if"
+questions with inline chart responses.
+
+```bash
+uv run streamlit run ifa_chat.py
+```
+
+In the chat app:
+
+- Describe your retirement situation in plain English, e.g.:
+  - *"I'm 55 with a £300k DC pot and £50k tax-free."*
+  - *"DB pension of £8,000/year from age 66."*
+  - *"I spend about £22,000 a year."*
+- Type **run** to run the simulation and see the main charts inline.
+- Ask **"what if"** questions to add life events:
+  - *"What if I need £18,000 for a roof at age 70?"*
+  - *"What if care costs start at £6,000/year from age 80?"*
+- Request specific views: *"Which pot runs out first?"*,
+  *"What about risk?"*, *"Sequence of returns"*, *"Show everything"*.
+- Type **help** to see the full list of understood phrases.
+- Type **reset** to start over with default parameters.
+
+
 
 - Baseline scenario: spending plan with no added life events.
 - Life-events scenario: baseline plus one-off or ongoing extra spending.

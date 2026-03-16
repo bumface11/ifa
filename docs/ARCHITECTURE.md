@@ -4,7 +4,8 @@ This project is organized so each part does one job.
 
 ## High-Level Structure
 
-- `ifa_web.py`: Streamlit user interface.
+- `ifa_web.py`: Streamlit parameter-driven dashboard.
+- `ifa_chat.py`: Streamlit conversational chat UI.
 - `pension_drawdown_simulator.py`: command-line runner that saves charts.
 - `ifa/config.py`: default assumptions.
 - `ifa/models.py`: typed data models (events, DB/DC pensions, results).
@@ -26,12 +27,19 @@ flowchart TD
     UI --> Explain[ifa.explain]
     UI --> Presets[ifa.presets]
 
+    Chat[ifa_chat.py Chat UI] --> Events
+    Chat --> Engine
+    Chat --> Plotting
+    Chat --> Metrics
+    Chat --> Explain
+
     CLI[pension_drawdown_simulator.py CLI] --> Events
     CLI --> Engine
     CLI --> Plotting
     CLI --> Metrics
 
     Config[ifa.config] --> UI
+    Config --> Chat
     Config --> CLI
     Models[ifa.models] --> Events
     Models --> Engine
