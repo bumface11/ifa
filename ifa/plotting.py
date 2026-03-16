@@ -308,6 +308,7 @@ def plot_pots_stacked_area(
     std_return: float,
     strategy_fn: DrawdownFn,
     seed: int,
+    annual_returns: np.ndarray | None = None,
     withdrawals_required: np.ndarray | None = None,
     life_events: Sequence[LifeEvent] = (),
     spending_drawdown_schedule: np.ndarray | None = None,
@@ -321,7 +322,15 @@ def plot_pots_stacked_area(
 ) -> Figure | None:
     """Plot stacked pot composition over time."""
     num_years = end_age - start_age
-    returns = generate_random_returns(num_years, mean_return, std_return, seed)
+    if annual_returns is None:
+        returns = generate_random_returns(num_years, mean_return, std_return, seed)
+    else:
+        returns = np.asarray(annual_returns, dtype=np.float64)
+        if len(returns) != num_years:
+            raise ValueError(
+                "annual_returns length must equal (end_age - start_age); "
+                f"got {len(returns)} for {num_years} years"
+            )
 
     (
         ages,
@@ -436,6 +445,7 @@ def plot_individual_pots_subplots(
     std_return: float,
     strategy_fn: DrawdownFn,
     seed: int,
+    annual_returns: np.ndarray | None = None,
     withdrawals_required: np.ndarray | None = None,
     life_events: Sequence[LifeEvent] = (),
     annual_spending_schedule: np.ndarray | None = None,
@@ -449,7 +459,15 @@ def plot_individual_pots_subplots(
 ) -> Figure | None:
     """Plot individual pot trajectories in four panels."""
     num_years = end_age - start_age
-    returns = generate_random_returns(num_years, mean_return, std_return, seed)
+    if annual_returns is None:
+        returns = generate_random_returns(num_years, mean_return, std_return, seed)
+    else:
+        returns = np.asarray(annual_returns, dtype=np.float64)
+        if len(returns) != num_years:
+            raise ValueError(
+                "annual_returns length must equal (end_age - start_age); "
+                f"got {len(returns)} for {num_years} years"
+            )
 
     (
         ages,
@@ -1026,6 +1044,7 @@ def plot_baseline_vs_scenario_balances(
     ages: np.ndarray,
     baseline_balances: np.ndarray,
     scenario_balances: np.ndarray,
+    annual_returns: np.ndarray | None = None,
     spending_drawdown_schedule: np.ndarray | None = None,
     secondary_dc_drawdown_age: int | None = None,
     db_pensions: Sequence[DbPensionInput] = (),
@@ -1038,8 +1057,24 @@ def plot_baseline_vs_scenario_balances(
     return_figure: bool = False,
     output_file: str | Path = "baseline_vs_scenario.png",
 ) -> Figure | None:
-    """Plot baseline and life-event scenario balances on one comparison chart."""
-    fig, ax = plt.subplots(figsize=(12, 7))
+    """Plot baseline and life-event scenario balances on one comparison chart.
+
+    When ``annual_returns`` is provided, a compact return-strip panel is rendered
+    below the main balance chart using green/red bars aligned to age.
+    """
+    if annual_returns is not None:
+        fig, axes = plt.subplots(
+            nrows=2,
+            ncols=1,
+            figsize=(12, 8),
+            sharex=True,
+            gridspec_kw={"height_ratios": [5.0, 1.6], "hspace": 0.08},
+        )
+        ax = axes[0]
+        returns_ax = axes[1]
+    else:
+        fig, ax = plt.subplots(figsize=(12, 7))
+        returns_ax = None
     ax.plot(
         ages,
         baseline_balances,
@@ -1074,6 +1109,31 @@ def plot_baseline_vs_scenario_balances(
     )
     _apply_numeric_text_scale(ax)
 
+    if annual_returns is not None and returns_ax is not None:
+        years_to_plot = min(len(annual_returns), max(0, len(ages) - 1))
+        if years_to_plot > 0:
+            return_ages = ages[1 : years_to_plot + 1]
+            return_values = annual_returns[:years_to_plot]
+            bar_colors = np.where(return_values >= 0.0, "#2ECC71", "#E74C3C")
+            returns_ax.bar(
+                return_ages,
+                return_values,
+                color=bar_colors.tolist(),
+                width=0.8,
+                alpha=0.85,
+                label="Annual return",
+            )
+            returns_ax.axhline(0.0, color="black", linewidth=1.0, alpha=0.7)
+            returns_ax.set_ylabel("Return")
+            returns_ax.yaxis.set_major_formatter(
+                plt.FuncFormatter(lambda value, _: f"{value * 100:.0f}%")
+            )
+            returns_ax.grid(True, axis="y", alpha=0.2)
+            returns_ax.legend(fontsize=9, loc="upper right")
+            _apply_numeric_text_scale(returns_ax)
+        else:
+            returns_ax.set_visible(False)
+
     if spending_drawdown_schedule is not None:
         axis_secondary = _add_spending_axis(ax, ages, spending_drawdown_schedule)
         lines1, labels1 = ax.get_legend_handles_labels()
@@ -1098,6 +1158,11 @@ def plot_baseline_vs_scenario_balances(
             event_entries,
             show_note_markers=True,
         )
+
+    if returns_ax is None:
+        ax.set_xlabel("Age", fontsize=12, fontweight="bold")
+    else:
+        returns_ax.set_xlabel("Age", fontsize=12, fontweight="bold")
 
     target = _to_output_path(output_file)
     _add_notes_box(fig, notes)
