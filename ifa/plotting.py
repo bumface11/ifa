@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import textwrap
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -96,17 +97,53 @@ def _annotate_last_value(
     )
 
 
+def _place_legend_outside(
+    ax: plt.Axes,
+    *,
+    handles: Sequence[object] | None = None,
+    labels: Sequence[str] | None = None,
+    fontsize: int = 10,
+    ncol: int = 1,
+    anchor_y: float = 0.64,
+    anchor_x: float = 0.76,
+) -> None:
+    """Place legend in a right-side gutter so it never obscures chart data."""
+    legend_handles, legend_labels = ax.get_legend_handles_labels()
+    if handles is None or labels is None:
+        handles = legend_handles
+        labels = legend_labels
+    if len(labels) == 0:
+        return
+
+    columns = max(1, min(ncol, len(labels)))
+    ax.legend(
+        handles,
+        labels,
+        fontsize=fontsize,
+        loc="upper left",
+        bbox_to_anchor=(anchor_x, anchor_y),
+        bbox_transform=ax.figure.transFigure,
+        borderaxespad=0.0,
+        ncol=columns,
+        framealpha=0.92,
+    )
+
+
 def _add_notes_box(fig: Figure, notes: Sequence[str]) -> None:
     """Add a compact notes box to the right side of the chart."""
     if len(notes) == 0:
-        fig.subplots_adjust(left=0.08, right=0.97, top=0.92, bottom=0.10)
+        fig.subplots_adjust(left=0.08, right=0.86, top=0.92, bottom=0.10)
         return
 
-    fig.subplots_adjust(left=0.08, right=0.76, top=0.92, bottom=0.10)
+    wrapped_notes: list[str] = []
+    for note in notes:
+        wrapped_notes.extend(textwrap.wrap(note, width=34) or [note])
+
+    fig.subplots_adjust(left=0.08, right=0.69, top=0.92, bottom=0.10)
     fig.text(
-        0.78,
+        0.76,
         0.98,
-        "Event notes\n" + "\n".join(notes),
+        "Event notes\n" + "\n".join(wrapped_notes),
         ha="left",
         va="top",
         fontsize=10,
@@ -140,7 +177,6 @@ def _draw_sorted_event_annotations(
                 color=color,
             )
         notes.append(f"{index}. {note_text}")
-
     return notes
 
 
@@ -444,7 +480,7 @@ def plot_pots_stacked_area(
         fontsize=14,
         fontweight="bold",
     )
-    ax.legend(fontsize=11, loc="upper right", framealpha=0.95)
+    _place_legend_outside(ax, fontsize=10, ncol=1)
     ax.grid(True, alpha=0.3)
     ax.yaxis.set_major_formatter(
         plt.FuncFormatter(lambda value, _: f"£{value / 1000:.0f}k")
@@ -456,7 +492,13 @@ def plot_pots_stacked_area(
         _apply_chart_chrome(axis_secondary)
         lines1, labels1 = ax.get_legend_handles_labels()
         lines2, labels2 = axis_secondary.get_legend_handles_labels()
-        ax.legend(lines1 + lines2, labels1 + labels2, fontsize=10, loc="upper right")
+        _place_legend_outside(
+            ax,
+            handles=lines1 + lines2,
+            labels=labels1 + labels2,
+            fontsize=10,
+            ncol=1,
+        )
 
     target = _to_output_path(output_file)
     _add_notes_box(fig, notes)
@@ -632,7 +674,7 @@ def plot_individual_pots_subplots(
     ax.set_xlabel("Age", fontsize=11, fontweight="bold")
     ax.set_ylabel("Annual Amount (£)", fontsize=11, fontweight="bold")
     ax.grid(True, alpha=0.3)
-    ax.legend(fontsize=10, loc="lower right")
+    _place_legend_outside(ax, fontsize=9, ncol=1)
     ax.yaxis.set_major_formatter(
         plt.FuncFormatter(lambda value, _: f"£{value / 1000:.0f}k")
     )
@@ -823,7 +865,7 @@ def plot_sequence_of_returns_scenarios(
         fontsize=14,
         fontweight="bold",
     )
-    ax.legend(fontsize=10, loc="best")
+    _place_legend_outside(ax, fontsize=10, ncol=1)
     ax.grid(True, alpha=0.3)
     ax.yaxis.set_major_formatter(
         plt.FuncFormatter(lambda value, _: f"£{value / 1000:.0f}k")
@@ -834,7 +876,13 @@ def plot_sequence_of_returns_scenarios(
         axis_secondary = _add_spending_axis(ax, ages, spending_drawdown_schedule)
         lines1, labels1 = ax.get_legend_handles_labels()
         lines2, labels2 = axis_secondary.get_legend_handles_labels()
-        ax.legend(lines1 + lines2, labels1 + labels2, fontsize=10, loc="best")
+        _place_legend_outside(
+            ax,
+            handles=lines1 + lines2,
+            labels=labels1 + labels2,
+            fontsize=10,
+            ncol=1,
+        )
 
     _add_notes_box(fig, notes)
     if save_output:
@@ -946,7 +994,7 @@ def plot_monte_carlo_fan_chart(
             f"\n({zero_pct:.1f}% of simulations exhausted pot before age {end_age})"
         )
     ax.set_title(title, fontsize=14, fontweight="bold")
-    ax.legend(fontsize=10, loc="best")
+    _place_legend_outside(ax, fontsize=10, ncol=1)
     ax.grid(True, alpha=0.3)
     ax.yaxis.set_major_formatter(
         plt.FuncFormatter(lambda value, _: f"£{value / 1000:.0f}k")
@@ -957,7 +1005,13 @@ def plot_monte_carlo_fan_chart(
         axis_secondary = _add_spending_axis(ax, ages, spending_drawdown_schedule)
         lines1, labels1 = ax.get_legend_handles_labels()
         lines2, labels2 = axis_secondary.get_legend_handles_labels()
-        ax.legend(lines1 + lines2, labels1 + labels2, fontsize=10, loc="best")
+        _place_legend_outside(
+            ax,
+            handles=lines1 + lines2,
+            labels=labels1 + labels2,
+            fontsize=10,
+            ncol=1,
+        )
 
     target = _to_output_path(output_file)
     _add_notes_box(fig, notes)
@@ -1117,8 +1171,6 @@ def plot_baseline_vs_scenario_balances(
         fig, ax = plt.subplots(figsize=(12, 7))
         returns_ax = None
         _apply_chart_chrome(ax)
-        _annotate_last_value(ax, ages, baseline_balances, color="#1F77B4")
-        _annotate_last_value(ax, ages, scenario_balances, color="#D62728")
     ax.plot(
         ages,
         baseline_balances,
@@ -1168,11 +1220,13 @@ def plot_baseline_vs_scenario_balances(
         fontsize=14,
         fontweight="bold",
     )
-    ax.legend(fontsize=10, loc="best")
+    _place_legend_outside(ax, fontsize=9, ncol=1)
     ax.yaxis.set_major_formatter(
         plt.FuncFormatter(lambda value, _: f"£{value / 1000:.0f}k")
     )
     _apply_numeric_text_scale(ax)
+    _annotate_last_value(ax, ages, baseline_balances, color="#1F77B4")
+    _annotate_last_value(ax, ages, scenario_balances, color="#D62728")
 
     if annual_returns is not None and returns_ax is not None:
         years_to_plot = min(len(annual_returns), max(0, len(ages) - 1))
@@ -1194,7 +1248,7 @@ def plot_baseline_vs_scenario_balances(
                 plt.FuncFormatter(lambda value, _: f"{value * 100:.0f}%")
             )
             returns_ax.grid(True, axis="y", alpha=0.2)
-            returns_ax.legend(fontsize=9, loc="upper right")
+            _place_legend_outside(returns_ax, fontsize=8, ncol=1, anchor_y=0.28)
             _apply_numeric_text_scale(returns_ax)
         else:
             returns_ax.set_visible(False)
@@ -1204,9 +1258,13 @@ def plot_baseline_vs_scenario_balances(
         _apply_chart_chrome(axis_secondary)
         lines1, labels1 = ax.get_legend_handles_labels()
         lines2, labels2 = axis_secondary.get_legend_handles_labels()
-        ax.legend(lines1 + lines2, labels1 + labels2, fontsize=10, loc="best")
-    for subplot_axis in axes.flat:
-        _apply_chart_chrome(subplot_axis)
+        _place_legend_outside(
+            ax,
+            handles=lines1 + lines2,
+            labels=labels1 + labels2,
+            fontsize=9,
+            ncol=1,
+        )
 
     notes: list[str] = []
     if len(ages) > 0 and (len(db_pensions) > 0 or len(life_events) > 0 or dc_pots):

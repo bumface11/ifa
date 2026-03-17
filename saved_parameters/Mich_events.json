@@ -1,7 +1,7 @@
 {
   "version": 1,
   "name": "Mich events",
-  "saved_at": "2026-03-17T08:09:06.283621+00:00",
+  "saved_at": "2026-03-17T08:21:05.805449+00:00",
   "sidebar_state": {
     "model_start_age_input": 51,
     "drawdown_start_age_input": 52,
@@ -15,7 +15,7 @@
     "save_outputs_input": false,
     "dc_pot_count": 2,
     "db_stream_count": 3,
-    "lump_count": 4,
+    "lump_count": 5,
     "step_count": 0,
     "dc_name_0": "HRIS DC",
     "dc_start_age_0": 57,
@@ -33,7 +33,7 @@
     "db_age_2": 60,
     "db_amount_2": 6900.0,
     "lump_name_0": "Car",
-    "lump_age_0": 52,
+    "lump_age_0": 53,
     "lump_amount_0": 15000.0,
     "lump_name_1": "Property",
     "lump_age_1": 55,
@@ -43,6 +43,9 @@
     "lump_amount_2": 7000.0,
     "lump_name_3": "Roof",
     "lump_age_3": 54,
-    "lump_amount_3": 20000.0
+    "lump_amount_3": 20000.0,
+    "lump_name_4": "Ceiling repair",
+    "lump_age_4": 53,
+    "lump_amount_4": 10000.0
   }
 }

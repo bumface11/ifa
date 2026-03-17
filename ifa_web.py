@@ -1385,8 +1385,9 @@ def main() -> None:
     if st.session_state.get("preset_selected") not in preset_options:
         st.session_state["preset_selected"] = "(none)"
 
-    st.sidebar.header("Saved Parameter Sets")
-    with st.sidebar.container():
+    st.sidebar.header("Controls")
+
+    with st.sidebar.expander("1) Presets", expanded=True):
         notice = st.session_state.pop("_preset_notice", None)
         if isinstance(notice, str) and len(notice) > 0:
             if notice.startswith("Choose"):
@@ -1398,8 +1399,8 @@ def main() -> None:
             "Preset name",
             key="preset_name_input",
             help=(
-                "Name for this preset. Edit the name then click Save to update "
-                "and rename the selected preset in one step."
+                "Edit name then Save to update and rename the selected preset "
+                "in one step."
             ),
         )
         selected_preset = st.selectbox(
@@ -1462,144 +1463,125 @@ def main() -> None:
             ):
                 st.session_state["_pending_preset_action"] = "delete"
 
-    display_mode = st.sidebar.radio(
-        "Display mode",
-        options=("Current inputs", "Compare saved presets"),
-        index=0,
-        help=(
-            "Use current inputs for the editable working view. Use compare "
-            "saved presets to show only saved preset outputs."
-        ),
-    )
-
-    st.sidebar.header("Preset Comparison")
-    comparison_layout = st.sidebar.radio(
-        "Comparison layout",
-        options=("Side by side", "Focus one preset"),
-        index=0,
-        help=(
-            "Use side-by-side on larger screens. Use focus mode on smaller "
-            "screens to inspect one preset output at a time."
-        ),
-    )
-    selected_compare_presets = st.sidebar.multiselect(
-        "Saved presets to compare",
-        options=list(preset_map.keys()),
-        default=compare_selection,
-        max_selections=3,
-        key="compare_preset_selection",
-        help="Choose up to three saved presets for the comparison workspace.",
-    )
-
-    st.sidebar.header("Core Inputs")
-    model_start_age = int(
-        st.sidebar.number_input(
-            "Model start age",
-            min_value=40,
-            max_value=85,
-            value=MODEL_START_AGE,
-            key="model_start_age_input",
-            help="The first age included in the projection timeline.",
-        )
-    )
-    end_age = int(
-        st.sidebar.number_input(
-            "End age",
-            min_value=model_start_age + 5,
-            max_value=110,
-            value=END_AGE,
-            key="end_age_input",
-        )
-    )
-    drawdown_start_age = int(
-        st.sidebar.number_input(
-            "Drawdown start age",
-            min_value=model_start_age,
-            max_value=end_age,
-            value=min(max(DRAWDOWN_START_AGE, model_start_age), end_age),
-            key="drawdown_start_age_input",
+    selected_compare_presets = compare_selection
+    with st.sidebar.expander("2) Display", expanded=True):
+        display_mode = st.radio(
+            "Display mode",
+            options=("Current inputs", "Compare saved presets"),
+            index=0,
             help=(
-                "Withdrawals are forced to zero before this age, so pots only "
-                "grow (or fall) with market returns during the gap."
+                "Current inputs uses the editable working scenario. Compare mode "
+                "shows outputs for selected saved presets only."
             ),
         )
-    )
+        comparison_layout = st.radio(
+            "Comparison layout",
+            options=("Side by side", "Focus one preset"),
+            index=0,
+            help="Use focus mode on smaller screens.",
+        )
+        if display_mode == "Compare saved presets":
+            selected_compare_presets = st.multiselect(
+                "Saved presets to compare",
+                options=list(preset_map.keys()),
+                default=compare_selection,
+                max_selections=3,
+                key="compare_preset_selection",
+                help="Choose up to three presets.",
+            )
 
-    st.sidebar.number_input(
-        "Tax-free pot £",
-        min_value=0.0,
-        value=float(INITIAL_TAX_FREE_POT),
-        step=1_000.0,
-        key="tax_free_pot_input",
-    )
+    with st.sidebar.expander("3) Plan Basics", expanded=True):
+        model_start_age = int(
+            st.number_input(
+                "Model start age",
+                min_value=40,
+                max_value=85,
+                value=MODEL_START_AGE,
+                key="model_start_age_input",
+                help="First age included in the timeline.",
+            )
+        )
+        end_age = int(
+            st.number_input(
+                "End age",
+                min_value=model_start_age + 5,
+                max_value=110,
+                value=END_AGE,
+                key="end_age_input",
+            )
+        )
+        drawdown_start_age = int(
+            st.number_input(
+                "Drawdown start age",
+                min_value=model_start_age,
+                max_value=end_age,
+                value=min(max(DRAWDOWN_START_AGE, model_start_age), end_age),
+                key="drawdown_start_age_input",
+                help=(
+                    "No withdrawals before this age. Pots only move with returns "
+                    "during that gap."
+                ),
+            )
+        )
 
-    st.sidebar.number_input(
-        "Baseline annual spending £",
-        min_value=0.0,
-        value=30_000.0,
-        step=1_000.0,
-        key="baseline_spending_input",
-        help=(
-            "Your planned yearly spending in today's money before adding "
-            "life events."
-        ),
-    )
+        st.number_input(
+            "Tax-free pot £",
+            min_value=0.0,
+            value=float(INITIAL_TAX_FREE_POT),
+            step=1_000.0,
+            key="tax_free_pot_input",
+        )
+        st.number_input(
+            "Baseline spending £/year",
+            min_value=0.0,
+            value=30_000.0,
+            step=1_000.0,
+            key="baseline_spending_input",
+            help="Planned yearly spending before extra life events.",
+        )
 
-    st.sidebar.markdown("### Market Settings")
-    st.sidebar.number_input(
-        "Mean real return",
-        min_value=-0.05,
-        max_value=0.15,
-        value=MEAN_RETURN,
-        step=0.005,
-        format="%.3f",
-        key="mean_return_input",
-        help=(
-            "Expected average yearly investment return after inflation. "
-            "Example: 0.04 means 4%."
-        ),
-    )
-    st.sidebar.number_input(
-        "Return volatility",
-        min_value=0.01,
-        max_value=0.30,
-        value=STD_RETURN,
-        step=0.005,
-        format="%.3f",
-        key="std_return_input",
-        help=(
-            "How much returns can swing up and down each year. "
-            "Higher means more uncertainty."
-        ),
-    )
-    st.sidebar.number_input(
-        "Random seed",
-        min_value=0,
-        value=RANDOM_SEED,
-        key="random_seed_input",
-        help=(
-            "A fixed number that makes random scenarios repeatable so you "
-            "can compare changes fairly."
-        ),
-    )
-    st.sidebar.number_input(
-        "Monte Carlo simulations",
-        min_value=100,
-        max_value=10_000,
-        value=NUM_SIMULATIONS,
-        step=100,
-        key="num_simulations_input",
-        help=(
-            "How many random market paths to test. More paths give a more "
-            "stable estimate but run slower."
-        ),
-    )
-
-    save_outputs = st.sidebar.checkbox(
-        "Save PNG outputs to output/",
-        value=False,
-        key="save_outputs_input",
-    )
+    with st.sidebar.expander("4) Market & Run Settings", expanded=False):
+        st.number_input(
+            "Mean real return",
+            min_value=-0.05,
+            max_value=0.15,
+            value=MEAN_RETURN,
+            step=0.005,
+            format="%.3f",
+            key="mean_return_input",
+            help="Expected average yearly return after inflation.",
+        )
+        st.number_input(
+            "Return volatility",
+            min_value=0.01,
+            max_value=0.30,
+            value=STD_RETURN,
+            step=0.005,
+            format="%.3f",
+            key="std_return_input",
+            help="Higher values mean a bumpier path.",
+        )
+        st.number_input(
+            "Random seed",
+            min_value=0,
+            value=RANDOM_SEED,
+            key="random_seed_input",
+            help="Fixed seed for repeatable comparisons.",
+        )
+        st.number_input(
+            "Monte Carlo simulations",
+            min_value=100,
+            max_value=10_000,
+            value=NUM_SIMULATIONS,
+            step=100,
+            key="num_simulations_input",
+            help="More simulations are smoother but slower.",
+        )
+        save_outputs = st.checkbox(
+            "Save PNG outputs to output/",
+            value=False,
+            key="save_outputs_input",
+        )
 
     with st.sidebar.expander("DC Pot Inputs", expanded=False):
         dc_pots, dc_pot_names = _build_dc_pots(
