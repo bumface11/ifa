@@ -60,15 +60,49 @@ def _draw_note_marker(
 def _apply_numeric_text_scale(ax: plt.Axes) -> None:
     """Increase numeric tick-label readability for zoomed-out views."""
     ax.tick_params(axis="both", labelsize=11)
+    
+def _apply_chart_chrome(ax: plt.Axes) -> None:
+    """Apply consistent visual chrome to chart axes."""
+    ax.set_facecolor("#EEF4FF")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color("#CBD5E1")
+    ax.spines["bottom"].set_color("#CBD5E1")
+    ax.grid(True, color="#CBD5E1", alpha=0.45, linewidth=0.8, linestyle="--")
+    
+def _annotate_last_value(
+    ax: plt.Axes,
+    ages: np.ndarray,
+    values: np.ndarray,
+    color: str,
+) -> None:
+    """Label the final point of a series so endpoint comparisons are instant."""
+    if len(ages) == 0 or len(values) == 0:
+        return
+    x_val = int(ages[-1])
+    y_val = float(values[-1])
+    ax.scatter([x_val], [y_val], color=color, s=24, zorder=6)
+    ax.annotate(
+        f"£{y_val / 1000:.0f}k",
+        xy=(x_val, y_val),
+        xytext=(8, 0),
+        textcoords="offset points",
+        va="center",
+        ha="left",
+        color=color,
+        fontsize=10,
+        fontweight="bold",
+        bbox={"boxstyle": "round,pad=0.2", "facecolor": "white", "alpha": 0.9},
+    )
 
 
 def _add_notes_box(fig: Figure, notes: Sequence[str]) -> None:
     """Add a compact notes box to the right side of the chart."""
     if len(notes) == 0:
-        fig.tight_layout()
+        fig.subplots_adjust(left=0.08, right=0.97, top=0.92, bottom=0.10)
         return
 
-    fig.tight_layout(rect=(0, 0, 0.76, 1))
+    fig.subplots_adjust(left=0.08, right=0.76, top=0.92, bottom=0.10)
     fig.text(
         0.78,
         0.98,
@@ -355,6 +389,7 @@ def plot_pots_stacked_area(
     )
 
     fig, ax = plt.subplots(figsize=(14, 8))
+    _apply_chart_chrome(ax)
 
     ax.fill_between(
         ages, 0, tax_free_balances, alpha=0.7, label="Tax-Free Pot", color="#2ECC71"
@@ -418,6 +453,7 @@ def plot_pots_stacked_area(
 
     if spending_drawdown_schedule is not None:
         axis_secondary = _add_spending_axis(ax, ages, spending_drawdown_schedule)
+        _apply_chart_chrome(axis_secondary)
         lines1, labels1 = ax.get_legend_handles_labels()
         lines2, labels2 = axis_secondary.get_legend_handles_labels()
         ax.legend(lines1 + lines2, labels1 + labels2, fontsize=10, loc="upper right")
@@ -493,7 +529,16 @@ def plot_individual_pots_subplots(
 
     combined_dc_balances = dc_balances + secondary_dc_balances
 
+    if annual_spending_schedule is not None:
+        if annual_spending_schedule.shape[0] != ages.shape[0]:
+            raise ValueError(
+                "annual_spending_schedule length must match ages length; "
+                f"got {annual_spending_schedule.shape[0]} and {ages.shape[0]}"
+            )
+
     fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+    for subplot_axis in axes.flat:
+        _apply_chart_chrome(subplot_axis)
 
     ax = axes[0, 0]
     ax.plot(
@@ -559,12 +604,6 @@ def plot_individual_pots_subplots(
     )
     ax.fill_between(ages, 0, db_income, step="post", alpha=0.2, color="#E74C3C")
     if annual_spending_schedule is not None:
-        if annual_spending_schedule.shape[0] != ages.shape[0]:
-            raise ValueError(
-                "annual_spending_schedule length must match ages length; "
-                f"got {annual_spending_schedule.shape[0]} and {ages.shape[0]}"
-            )
-
         ax.step(
             ages,
             annual_spending_schedule,
@@ -1072,9 +1111,14 @@ def plot_baseline_vs_scenario_balances(
         )
         ax = axes[0]
         returns_ax = axes[1]
+        _apply_chart_chrome(ax)
+        _apply_chart_chrome(returns_ax)
     else:
         fig, ax = plt.subplots(figsize=(12, 7))
         returns_ax = None
+        _apply_chart_chrome(ax)
+        _annotate_last_value(ax, ages, baseline_balances, color="#1F77B4")
+        _annotate_last_value(ax, ages, scenario_balances, color="#D62728")
     ax.plot(
         ages,
         baseline_balances,
@@ -1094,6 +1138,28 @@ def plot_baseline_vs_scenario_balances(
         label="Scenario (with life events)",
     )
 
+    # Highlight divergence between baseline and scenario so differences are obvious.
+    ax.fill_between(
+        ages,
+        baseline_balances,
+        scenario_balances,
+        where=scenario_balances <= baseline_balances,
+        color="#FCA5A5",
+        alpha=0.25,
+        interpolate=True,
+        label="Scenario shortfall",
+    )
+    ax.fill_between(
+        ages,
+        baseline_balances,
+        scenario_balances,
+        where=scenario_balances > baseline_balances,
+        color="#86EFAC",
+        alpha=0.22,
+        interpolate=True,
+        label="Scenario uplift",
+    )
+
     ax.axhline(y=0, color="black", linestyle=":", linewidth=1.3, alpha=0.6)
     ax.set_xlabel("Age", fontsize=12, fontweight="bold")
     ax.set_ylabel("Total Balance (£)", fontsize=12, fontweight="bold")
@@ -1102,7 +1168,6 @@ def plot_baseline_vs_scenario_balances(
         fontsize=14,
         fontweight="bold",
     )
-    ax.grid(True, alpha=0.3)
     ax.legend(fontsize=10, loc="best")
     ax.yaxis.set_major_formatter(
         plt.FuncFormatter(lambda value, _: f"£{value / 1000:.0f}k")
@@ -1136,9 +1201,12 @@ def plot_baseline_vs_scenario_balances(
 
     if spending_drawdown_schedule is not None:
         axis_secondary = _add_spending_axis(ax, ages, spending_drawdown_schedule)
+        _apply_chart_chrome(axis_secondary)
         lines1, labels1 = ax.get_legend_handles_labels()
         lines2, labels2 = axis_secondary.get_legend_handles_labels()
         ax.legend(lines1 + lines2, labels1 + labels2, fontsize=10, loc="best")
+    for subplot_axis in axes.flat:
+        _apply_chart_chrome(subplot_axis)
 
     notes: list[str] = []
     if len(ages) > 0 and (len(db_pensions) > 0 or len(life_events) > 0 or dc_pots):
