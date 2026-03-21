@@ -804,7 +804,14 @@ def plot_sequence_of_returns_scenarios(
         dc_pots=dc_pots,
     )
 
-    fig, ax = plt.subplots(figsize=(12, 7))
+    fig, (ax, ax_ret) = plt.subplots(
+        nrows=2,
+        ncols=1,
+        figsize=(12, 9),
+        sharex=True,
+        gridspec_kw={"height_ratios": [5, 1.8], "hspace": 0.08},
+    )
+    _apply_chart_chrome(ax_ret)
 
     ax.plot(
         ages,
@@ -857,7 +864,6 @@ def plot_sequence_of_returns_scenarios(
     )
     notes = _draw_sorted_event_annotations(ax, event_entries, show_note_markers=True)
 
-    ax.set_xlabel("Age", fontsize=12, fontweight="bold")
     ax.set_ylabel("Pension Balance (£)", fontsize=12, fontweight="bold")
     title_suffix = "Life events active" if len(life_events) > 0 else "No life events"
     ax.set_title(
@@ -883,6 +889,56 @@ def plot_sequence_of_returns_scenarios(
             fontsize=10,
             ncol=1,
         )
+
+    # ── Returns strip ──────────────────────────────────────────────────────────
+    return_ages = ages[1:]
+    bar_w = 0.38
+    ax_ret.bar(
+        return_ages - bar_w / 2,
+        early_bad,
+        width=bar_w,
+        color="#1F77B4",
+        alpha=0.85,
+        label="Early bad",
+    )
+    ax_ret.bar(
+        return_ages + bar_w / 2,
+        early_good,
+        width=bar_w,
+        color="#FF7F0E",
+        alpha=0.85,
+        label="Early good",
+    )
+    ax_ret.axhline(0.0, color="black", linewidth=1.0, alpha=0.7)
+    running_indices = np.arange(1, len(early_bad) + 1)
+    bad_running_mean = np.cumsum(early_bad) / running_indices
+    good_running_mean = np.cumsum(early_good) / running_indices
+    ax_ret.plot(
+        return_ages,
+        bad_running_mean,
+        color="#1F77B4",
+        linewidth=1.8,
+        linestyle="--",
+        alpha=0.9,
+        label=f"Bad running avg ({np.mean(early_bad) * 100:.1f}% final)",
+    )
+    ax_ret.plot(
+        return_ages,
+        good_running_mean,
+        color="#FF7F0E",
+        linewidth=1.8,
+        linestyle="--",
+        alpha=0.9,
+        label=f"Good running avg ({np.mean(early_good) * 100:.1f}% final)",
+    )
+    ax_ret.set_xlabel("Age", fontsize=12, fontweight="bold")
+    ax_ret.set_ylabel("Return")
+    ax_ret.yaxis.set_major_formatter(
+        plt.FuncFormatter(lambda value, _: f"{value * 100:.0f}%")
+    )
+    ax_ret.grid(True, axis="y", alpha=0.2)
+    _place_legend_outside(ax_ret, fontsize=8, ncol=1, anchor_y=0.28)
+    _apply_numeric_text_scale(ax_ret)
 
     _add_notes_box(fig, notes)
     if save_output:
