@@ -43,14 +43,13 @@ def search_programmes(
         return results
 
     pattern = f"%{stripped}%"
-    conn = db._conn  # noqa: SLF001
-    rows = conn.execute(
+    rows = db.query(
         "SELECT * FROM programmes "
         "WHERE title LIKE ? OR synopsis LIKE ? OR series_title LIKE ? "
         "OR brand_title LIKE ? OR categories LIKE ? "
         "ORDER BY first_broadcast DESC LIMIT ? OFFSET ?",
         (pattern, pattern, pattern, pattern, pattern, limit, offset),
-    ).fetchall()
+    )
     from radio_cache.cache_db import _row_to_programme
 
     return [_row_to_programme(r) for r in rows]

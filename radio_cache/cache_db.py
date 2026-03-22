@@ -159,6 +159,22 @@ class CacheDB:
     def __exit__(self, *args: object) -> None:
         self.close()
 
+    def query(
+        self,
+        sql: str,
+        params: tuple | dict = (),
+    ) -> list[sqlite3.Row]:
+        """Execute a read-only SQL query and return all rows.
+
+        Args:
+            sql: SQL query string.
+            params: Positional or named bind parameters.
+
+        Returns:
+            List of Row objects.
+        """
+        return self._conn.execute(sql, params).fetchall()
+
     def upsert_programme(self, prog: Programme) -> None:
         """Insert or update a single programme.
 
