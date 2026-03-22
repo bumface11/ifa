@@ -5,3 +5,5 @@
 __pycache__/
 output/
 tests/__pycache__/
+radio_cache.db
+*.db-journal

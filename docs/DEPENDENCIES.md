@@ -10,6 +10,12 @@ This page shows how modules depend on each other.
 - `orjson`: fast local JSON serialization for saved sidebar parameter presets.
 - `pandas`: currently installed as a project dependency.
 
+### Radio Cache (optional extras: `pip install -e ".[radio]"`)
+
+- `fastapi`: lightweight async web framework for the radio cache API.
+- `jinja2`: HTML template rendering for the web search UI.
+- `uvicorn`: ASGI server to run the FastAPI application.
+
 ## Internal Import Diagram
 
 ```mermaid
