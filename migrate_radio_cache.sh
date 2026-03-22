@@ -1,77 +1,82 @@
 #!/usr/bin/env bash
 # migrate_radio_cache.sh
 #
-# Extracts the radio cache code from the ifa repo git history and pushes it to
-# the bumface11/radiocache repository.
+# Extracts the radio cache code from the ifa repo git history and pushes
+# it to the bumface11/radiocache repository.
 #
-# Usage:
-#   cd <ifa-repo-directory>
+# Usage (run from the ifa repo root):
+#
+#   git fetch --unshallow origin   # only needed if you have a shallow clone
 #   bash migrate_radio_cache.sh
 #
-# Prerequisites:
-#   - Git must be configured with credentials that can push to
-#     https://github.com/bumface11/radiocache
-#   - Run from inside the ifa repository root
+# The script uses your normal git credentials (SSH key or credential
+# manager).  Make sure you can push to bumface11/radiocache before running.
 set -euo pipefail
 
-SOURCE_COMMIT="cf83c68"   # latest radio-cache state (with code-review fixes)
+SOURCE_COMMIT="cf83c68"   # radio-cache state with code-review fixes
 FALLBACK_COMMIT="b734f91" # original feat commit (files not touched by fix)
 DEST_DIR="$(mktemp -d)"
 DEST_REPO="https://github.com/bumface11/radiocache.git"
+IFA_DIR="$(pwd)"
 
-# Verify source commits exist in this repository
-if ! git cat-file -e "$SOURCE_COMMIT" 2>/dev/null; then
-  echo "ERROR: Source commit $SOURCE_COMMIT not found."
-  echo "Make sure you are running this from the ifa repo with full history."
-  echo "Try: git fetch --unshallow origin"
+# ── Preflight checks ────────────────────────────────────────────────────────
+
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "ERROR: Not inside a git repository.  Run this from the ifa repo root."
   exit 1
 fi
-if ! git cat-file -e "$FALLBACK_COMMIT" 2>/dev/null; then
-  echo "ERROR: Fallback commit $FALLBACK_COMMIT not found."
-  echo "Make sure you are running this from the ifa repo with full history."
-  echo "Try: git fetch --unshallow origin"
-  exit 1
-fi
+
+for sha in "$SOURCE_COMMIT" "$FALLBACK_COMMIT"; do
+  if ! git cat-file -e "$sha" 2>/dev/null; then
+    echo "ERROR: Commit $sha not found in history."
+    echo "If this is a shallow clone, run:  git fetch --unshallow origin"
+    exit 1
+  fi
+done
+
+# ── Extract source files from git history ────────────────────────────────────
 
 echo "Extracting radio cache files to $DEST_DIR ..."
 
 FILES=(
-  "radio_cache/__init__.py"
-  "radio_cache/bbc_feed_parser.py"
-  "radio_cache/cache_db.py"
-  "radio_cache/models.py"
-  "radio_cache/refresh.py"
-  "radio_cache/search.py"
-  "radio_cache_api.py"
-  "static/radio_cache/style.css"
-  "templates/radio_cache/base.html"
-  "templates/radio_cache/brand_detail.html"
-  "templates/radio_cache/brand_list.html"
-  "templates/radio_cache/index.html"
-  "templates/radio_cache/search_results.html"
-  "templates/radio_cache/series_detail.html"
-  "templates/radio_cache/series_list.html"
-  "tests/test_radio_cache_db.py"
-  "tests/test_radio_feed_parser.py"
-  "tests/test_radio_models.py"
-  "tests/test_radio_refresh.py"
-  "tests/test_radio_search.py"
-  ".github/workflows/refresh-radio-cache.yml"
+  radio_cache/__init__.py
+  radio_cache/bbc_feed_parser.py
+  radio_cache/cache_db.py
+  radio_cache/models.py
+  radio_cache/refresh.py
+  radio_cache/search.py
+  radio_cache_api.py
+  static/radio_cache/style.css
+  templates/radio_cache/base.html
+  templates/radio_cache/brand_detail.html
+  templates/radio_cache/brand_list.html
+  templates/radio_cache/index.html
+  templates/radio_cache/search_results.html
+  templates/radio_cache/series_detail.html
+  templates/radio_cache/series_list.html
+  tests/test_radio_cache_db.py
+  tests/test_radio_feed_parser.py
+  tests/test_radio_models.py
+  tests/test_radio_refresh.py
+  tests/test_radio_search.py
+  .github/workflows/refresh-radio-cache.yml
 )
 
 for f in "${FILES[@]}"; do
   mkdir -p "$DEST_DIR/$(dirname "$f")"
-  if ! git show "$SOURCE_COMMIT":"$f" > "$DEST_DIR/$f" 2>/dev/null; then
-    if ! git show "$FALLBACK_COMMIT":"$f" > "$DEST_DIR/$f" 2>/dev/null; then
-      echo "ERROR: Could not extract $f from either commit."
+  if ! git show "$SOURCE_COMMIT:$f" > "$DEST_DIR/$f" 2>/dev/null; then
+    if ! git show "$FALLBACK_COMMIT:$f" > "$DEST_DIR/$f" 2>/dev/null; then
+      echo "ERROR: Could not extract $f from either source commit."
       exit 1
     fi
   fi
 done
 
+echo "  Extracted ${#FILES[@]} files."
+
 # ── Create standalone project files ──────────────────────────────────────────
 
-cat > "$DEST_DIR/.gitignore" << 'GITIGNORE'
+cat > "$DEST_DIR/.gitignore" << 'EOF'
 .venv/
 .mypy_cache/
 .pytest_cache/
@@ -80,9 +85,9 @@ __pycache__/
 *.egg-info/
 radio_cache.db
 *.db-journal
-GITIGNORE
+EOF
 
-cat > "$DEST_DIR/pyproject.toml" << 'PYPROJECT'
+cat > "$DEST_DIR/pyproject.toml" << 'EOF'
 [project]
 name = "radiocache"
 version = "0.1.0"
@@ -119,9 +124,9 @@ warn_unused_ignores = true
 warn_return_any = true
 show_error_codes = true
 files = ["radio_cache", "radio_cache_api.py", "tests"]
-PYPROJECT
+EOF
 
-cat > "$DEST_DIR/README.md" << 'README'
+cat > "$DEST_DIR/README.md" << 'EOF'
 # BBC Radio Drama Cache
 
 A cloud-hostable cache of BBC Radio drama programme metadata with a modern
@@ -144,7 +149,6 @@ search interface.
 ## Quick Start
 
 ```bash
-# Install in editable mode
 pip install -e .
 
 # Refresh the cache (fetches from BBC feeds)
@@ -157,29 +161,8 @@ python -m radio_cache.refresh --import-json radio_cache_export.json
 uvicorn radio_cache_api:app --reload
 ```
 
-Open `http://localhost:8000` to search and browse programmes.  Each programme
+Open <http://localhost:8000> to search and browse programmes.  Each programme
 shows a copyable `get_iplayer` command for local download.
-
-## Hosting Options (Cheap/Free)
-
-| Option | Cost | Notes |
-|---|---|---|
-| **Render free tier** | Free | Deploy `radio_cache_api.py`; spins down on idle |
-| **Fly.io** | Free tier | 3 shared VMs free |
-| **Railway** | Free trial | Simple Docker deploy |
-| **GitHub Pages** | Free | Host `radio_cache_export.json` as static file |
-| **GitHub Actions** | Free | Daily cache refresh via cron workflow |
-
-## Downloading Programmes
-
-Find a programme in the web UI or JSON export, then use:
-
-```bash
-get_iplayer --pid=<PID> --type=radio
-```
-
-Requires [get_iplayer](https://github.com/get-iplayer/get_iplayer) installed
-locally.
 
 ## Running Tests
 
@@ -197,28 +180,19 @@ python -m pytest
 - `static/radio_cache/` -- CSS styles
 - `tests/` -- unit tests (54 tests)
 - `.github/workflows/refresh-radio-cache.yml` -- daily cache refresh cron job
-README
+EOF
 
-# ── Initialize git and push ─────────────────────────────────────────────────
+# ── Commit and push ─────────────────────────────────────────────────────────
 
 cd "$DEST_DIR"
 git init -b main
 
-# Inherit git identity and credentials from the source repo
-_src="$OLDPWD"
-git config user.name "$(cd "$_src" && git config user.name 2>/dev/null || echo 'radiocache-migrator')"
-git config user.email "$(cd "$_src" && git config user.email 2>/dev/null || echo 'noreply@github.com')"
-_cred_helper="$(cd "$_src" && git config credential.helper 2>/dev/null || true)"
-_cred_user="$(cd "$_src" && git config credential.username 2>/dev/null || true)"
-if [ -n "$_cred_helper" ]; then
-  git config credential.helper "$_cred_helper"
-fi
-if [ -n "$_cred_user" ]; then
-  git config credential.username "$_cred_user"
-fi
+# Use the caller's global git identity; fall back to a sensible default
+git config user.name  "$(git config --global user.name  2>/dev/null || echo 'radiocache-migrator')"
+git config user.email "$(git config --global user.email 2>/dev/null || echo 'noreply@github.com')"
 
 git add -A
-git commit -m "feat: BBC Radio Drama cloud cache with search, API, and daily refresh
+git commit -q -m "feat: BBC Radio Drama cloud cache with search, API, and daily refresh
 
 Standalone radio cache package extracted from bumface11/ifa.
 
@@ -233,19 +207,21 @@ Standalone radio cache package extracted from bumface11/ifa.
 git remote add origin "$DEST_REPO"
 
 echo ""
-echo "Ready to push. Running: git push -u origin main"
-if ! git push -u origin main 2>&1; then
+echo "Pushing to $DEST_REPO ..."
+if git push -u origin main 2>&1; then
   echo ""
-  echo "Push failed. Common causes:"
-  echo "  - Git credentials not configured for $DEST_REPO"
-  echo "  - Repository does not exist yet (create it at GitHub first)"
-  echo "  - Repository already has commits (use --force if intentional)"
+  echo "Done!  Radio cache code is now at: $DEST_REPO"
+  echo "You can delete the temp directory: rm -rf $DEST_DIR"
+else
   echo ""
-  echo "The prepared repo is at: $DEST_DIR"
-  echo "You can push manually with: cd $DEST_DIR && git push -u origin main"
+  echo "Push failed.  The prepared repo is ready at:"
+  echo "  $DEST_DIR"
+  echo ""
+  echo "You can push manually:"
+  echo "  cd $DEST_DIR && git push -u origin main"
+  echo ""
+  echo "Common fixes:"
+  echo "  - Make sure https://github.com/bumface11/radiocache exists (create it on GitHub first)"
+  echo "  - Check your git credentials (try: git ls-remote $DEST_REPO)"
   exit 1
 fi
-
-echo ""
-echo "Done! Radio cache code is now at: $DEST_REPO"
-echo "You can safely delete: $DEST_DIR"
