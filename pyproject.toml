@@ -11,15 +11,8 @@ dependencies = [
     "streamlit>=1.40",
 ]
 
-[project.optional-dependencies]
-radio = [
-    "fastapi>=0.115",
-    "jinja2>=3.1",
-    "uvicorn[standard]>=0.34",
-]
-
 [tool.setuptools.packages.find]
-include = ["ifa*", "radio_cache*"]
+include = ["ifa*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -42,4 +35,4 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 warn_return_any = true
 show_error_codes = true
-files = ["ifa", "radio_cache", "pension_drawdown_simulator.py", "tests"]
+files = ["ifa", "pension_drawdown_simulator.py", "tests"]

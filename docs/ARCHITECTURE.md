@@ -18,17 +18,6 @@ This project is organized so each part does one job.
 - `ifa/presets.py`: local save/load/delete helpers for Streamlit sidebar
     presets, including filename sanitization and saved-at metadata.
 
-### Radio Cache Subsystem
-
-- `radio_cache/models.py`: data models for programmes, series, brands.
-- `radio_cache/bbc_feed_parser.py`: fetches programme metadata from BBC feeds.
-- `radio_cache/cache_db.py`: SQLite-backed cache with FTS5 full-text search.
-- `radio_cache/search.py`: search and grouping logic (series, brands).
-- `radio_cache/refresh.py`: CLI cache refresh script and JSON export/import.
-- `radio_cache_api.py`: FastAPI web application with REST API and HTML UI.
-- `templates/radio_cache/`: Jinja2 HTML templates for the web UI.
-- `.github/workflows/refresh-radio-cache.yml`: daily GitHub Actions cron job.
-
 ```mermaid
 flowchart TD
     UI[ifa_web.py Streamlit UI] --> Events[ifa.events]
