@@ -19,6 +19,20 @@ FALLBACK_COMMIT="b734f91" # original feat commit (files not touched by fix)
 DEST_DIR="$(mktemp -d)"
 DEST_REPO="https://github.com/bumface11/radiocache.git"
 
+# Verify source commits exist in this repository
+if ! git cat-file -e "$SOURCE_COMMIT" 2>/dev/null; then
+  echo "ERROR: Source commit $SOURCE_COMMIT not found."
+  echo "Make sure you are running this from the ifa repo with full history."
+  echo "Try: git fetch --unshallow origin"
+  exit 1
+fi
+if ! git cat-file -e "$FALLBACK_COMMIT" 2>/dev/null; then
+  echo "ERROR: Fallback commit $FALLBACK_COMMIT not found."
+  echo "Make sure you are running this from the ifa repo with full history."
+  echo "Try: git fetch --unshallow origin"
+  exit 1
+fi
+
 echo "Extracting radio cache files to $DEST_DIR ..."
 
 FILES=(
@@ -48,7 +62,10 @@ FILES=(
 for f in "${FILES[@]}"; do
   mkdir -p "$DEST_DIR/$(dirname "$f")"
   if ! git show "$SOURCE_COMMIT":"$f" > "$DEST_DIR/$f" 2>/dev/null; then
-    git show "$FALLBACK_COMMIT":"$f" > "$DEST_DIR/$f"
+    if ! git show "$FALLBACK_COMMIT":"$f" > "$DEST_DIR/$f" 2>/dev/null; then
+      echo "ERROR: Could not extract $f from either commit."
+      exit 1
+    fi
   fi
 done
 
@@ -203,8 +220,18 @@ git remote add origin "$DEST_REPO"
 
 echo ""
 echo "Ready to push. Running: git push -u origin main"
-git push -u origin main
+if ! git push -u origin main 2>&1; then
+  echo ""
+  echo "Push failed. Common causes:"
+  echo "  - Git credentials not configured for $DEST_REPO"
+  echo "  - Repository does not exist yet (create it at GitHub first)"
+  echo "  - Repository already has commits (use --force if intentional)"
+  echo ""
+  echo "The prepared repo is at: $DEST_DIR"
+  echo "You can push manually with: cd $DEST_DIR && git push -u origin main"
+  exit 1
+fi
 
 echo ""
 echo "Done! Radio cache code is now at: $DEST_REPO"
-echo "Temp directory: $DEST_DIR"
+echo "You can safely delete: $DEST_DIR"
