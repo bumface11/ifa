@@ -203,6 +203,20 @@ README
 
 cd "$DEST_DIR"
 git init -b main
+
+# Inherit git identity and credentials from the source repo
+_src="$OLDPWD"
+git config user.name "$(cd "$_src" && git config user.name 2>/dev/null || echo 'radiocache-migrator')"
+git config user.email "$(cd "$_src" && git config user.email 2>/dev/null || echo 'noreply@github.com')"
+_cred_helper="$(cd "$_src" && git config credential.helper 2>/dev/null || true)"
+_cred_user="$(cd "$_src" && git config credential.username 2>/dev/null || true)"
+if [ -n "$_cred_helper" ]; then
+  git config credential.helper "$_cred_helper"
+fi
+if [ -n "$_cred_user" ]; then
+  git config credential.username "$_cred_user"
+fi
+
 git add -A
 git commit -m "feat: BBC Radio Drama cloud cache with search, API, and daily refresh
 
