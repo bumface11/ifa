@@ -64,7 +64,7 @@ _BBC_PLAYABLE_API: Final[str] = (
 )
 ```
 
-Add a page-size constant:
+Add a page-size constant (the BBC API default and maximum is 30):
 
 ```python
 _PAGE_LIMIT: Final[int] = 30
@@ -128,7 +128,8 @@ def fetch_drama_programmes(
 
 ### 2. `tests/test_radio_feed_parser.py`
 
-Add tests that validate the corrected URL construction:
+Add tests that validate the corrected URL construction (`_PAGE_LIMIT = 30`
+is the constant defined in the main module):
 
 ```python
 from unittest.mock import patch
