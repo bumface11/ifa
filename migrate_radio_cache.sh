@@ -35,6 +35,8 @@ for sha in "$SOURCE_COMMIT" "$FALLBACK_COMMIT"; do
 done
 
 # ── Extract source files from git history ────────────────────────────────────
+# Files that exist in the working tree are preferred (they may contain fixes
+# applied after the original commits).  Fall back to git history otherwise.
 
 echo "Extracting radio cache files to $DEST_DIR ..."
 
@@ -64,9 +66,12 @@ FILES=(
 
 for f in "${FILES[@]}"; do
   mkdir -p "$DEST_DIR/$(dirname "$f")"
-  if ! git show "$SOURCE_COMMIT:$f" > "$DEST_DIR/$f" 2>/dev/null; then
+  # Prefer the working-tree copy (may contain fixes)
+  if [ -f "$IFA_DIR/$f" ]; then
+    cp "$IFA_DIR/$f" "$DEST_DIR/$f"
+  elif ! git show "$SOURCE_COMMIT:$f" > "$DEST_DIR/$f" 2>/dev/null; then
     if ! git show "$FALLBACK_COMMIT:$f" > "$DEST_DIR/$f" 2>/dev/null; then
-      echo "ERROR: Could not extract $f from either source commit."
+      echo "ERROR: Could not find $f in working tree or source commits."
       exit 1
     fi
   fi
