@@ -223,12 +223,13 @@ def simulate_multi_pot_pension_path(
                 if gross_dc_withdrawn >= gross_dc_needed:
                     break
 
-                withdrawal = min(
+                # Amount taken from this pot (gross when tax is active).
+                gross_withdrawal = min(
                     gross_dc_needed - gross_dc_withdrawn,
                     float(dc_balance_matrix[pot_index, index]),
                 )
-                dc_balance_matrix[pot_index, index] -= withdrawal
-                gross_dc_withdrawn += withdrawal
+                dc_balance_matrix[pot_index, index] -= gross_withdrawal
+                gross_dc_withdrawn += gross_withdrawal
 
             current_withdrawal += gross_dc_withdrawn
 

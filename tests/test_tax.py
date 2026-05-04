@@ -241,3 +241,5 @@ class TestTaxAwareEngine:
 
         # DC pot should be identical because tax-free pot covers all spending.
         assert np.allclose(dc_no_tax, dc_with_tax)
+        # Tax-free pot drawdown path should also be identical.
+        assert np.allclose(tf_no_tax, tf_with_tax)

@@ -735,8 +735,8 @@ def _build_simulation_inputs_from_state(
     )
     raw_regime = state.get("tax_regime_input")
     try:
-        tax_regime = TaxRegime(raw_regime) if isinstance(raw_regime, str) else DEFAULT_TAX_REGIME
-    except ValueError:
+        tax_regime = TaxRegime(raw_regime)
+    except (ValueError, TypeError):
         tax_regime = DEFAULT_TAX_REGIME
     mean_return = _coerce_float(
         state.get("mean_return_input"),
