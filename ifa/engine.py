@@ -8,6 +8,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ifa.models import DbPension, DcPot
+from ifa.tax import TaxRegime, gross_up_dc_withdrawal
 
 DbPensionInput = DbPension | tuple[int, float]
 DcPotInput = DcPot | tuple[int, float]
@@ -76,6 +77,7 @@ def simulate_multi_pot_pension_path(
     drawdown_fn: DrawdownFn | None = None,
     withdrawals_required: NDArray[np.float64] | None = None,
     dc_pots: Sequence[DcPotInput] | None = None,
+    tax_regime: TaxRegime | None = None,
 ) -> tuple[
     NDArray[np.int_],
     NDArray[np.float64],
@@ -100,6 +102,9 @@ def simulate_multi_pot_pension_path(
         withdrawals_required: Optional required withdrawals aligned with ages.
             When provided, these values are used directly (DB-adjusted spending).
         dc_pots: Optional list of DC pots as ``(drawdown_start_age, balance)``.
+        tax_regime: When set, DC pot withdrawals are grossed up so that the
+            person receives the requested *net* amount after UK income tax.
+            ``None`` disables tax grossing-up (backward-compatible default).
 
     Returns:
         A tuple containing arrays for ages, balances, incomes, and withdrawals.
@@ -196,18 +201,36 @@ def simulate_multi_pot_pension_path(
         current_withdrawal += tax_free_withdrawal
 
         if current_withdrawal < desired_withdrawal:
+            # Net amount still needed from taxable DC pots.
+            net_dc_needed = desired_withdrawal - current_withdrawal
+
+            # When a tax regime is active, gross up the DC withdrawal so the
+            # person receives the correct net-of-tax amount.  DB income
+            # already received this year shifts which tax band applies.
+            if tax_regime is not None:
+                gross_dc_needed = gross_up_dc_withdrawal(
+                    net_needed=net_dc_needed,
+                    db_income=db_income,
+                    regime=tax_regime,
+                )
+            else:
+                gross_dc_needed = net_dc_needed
+
+            gross_dc_withdrawn = 0.0
             for pot_index in range(num_dc_pots):
                 if current_age < int(drawdown_start_ages[pot_index]):
                     continue
-                if current_withdrawal >= desired_withdrawal:
+                if gross_dc_withdrawn >= gross_dc_needed:
                     break
 
                 withdrawal = min(
-                    desired_withdrawal - current_withdrawal,
+                    gross_dc_needed - gross_dc_withdrawn,
                     float(dc_balance_matrix[pot_index, index]),
                 )
                 dc_balance_matrix[pot_index, index] -= withdrawal
-                current_withdrawal += withdrawal
+                gross_dc_withdrawn += withdrawal
+
+            current_withdrawal += gross_dc_withdrawn
 
         if num_dc_pots > 0:
             dc_balance_matrix[:, index] = np.maximum(dc_balance_matrix[:, index], 0.0)
@@ -249,6 +272,7 @@ def run_monte_carlo_simulation(
     seed: int,
     withdrawals_required: NDArray[np.float64] | None = None,
     dc_pots: Sequence[DcPotInput] | None = None,
+    tax_regime: TaxRegime | None = None,
 ) -> tuple[NDArray[np.int_], NDArray[np.float64]]:
     """Run Monte Carlo simulation for one strategy.
 
@@ -267,6 +291,7 @@ def run_monte_carlo_simulation(
         seed: RNG seed.
         withdrawals_required: Optional required withdrawals aligned with ages.
         dc_pots: Optional list of DC pots as ``(drawdown_start_age, balance)``.
+        tax_regime: When set, DC pot withdrawals are grossed up for income tax.
 
     Returns:
         Ages array and matrix of path balances with shape
@@ -294,6 +319,7 @@ def run_monte_carlo_simulation(
             strategy_fn,
             withdrawals_required=withdrawals_required,
             dc_pots=dc_pots,
+            tax_regime=tax_regime,
         )
         paths[simulation_index, :] = total_balances
 

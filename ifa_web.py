@@ -16,6 +16,7 @@ from numpy.typing import NDArray
 
 from ifa.config import (
     DB_PENSIONS,
+    DEFAULT_TAX_REGIME,
     DRAWDOWN_START_AGE,
     DC_POTS,
     END_AGE,
@@ -45,6 +46,7 @@ from ifa.metrics import (
     summarize_path,
 )
 from ifa.models import LifeEvent, LumpSumEvent, SpendingStepEvent
+from ifa.tax import TaxRegime
 from ifa.plotting import (
     plot_baseline_vs_scenario_balances,
     plot_individual_pots_subplots,
@@ -69,6 +71,7 @@ _TRACKED_STATIC_KEYS: tuple[str, ...] = (
     "end_age_input",
     "tax_free_pot_input",
     "baseline_spending_input",
+    "tax_regime_input",
     "mean_return_input",
     "std_return_input",
     "random_seed_input",
@@ -95,6 +98,7 @@ class SimulationInputs:
     end_age: int
     tax_free_pot: float
     baseline_spending: float
+    tax_regime: TaxRegime
     mean_return: float
     std_return: float
     random_seed: int
@@ -135,6 +139,7 @@ def _ensure_sidebar_defaults() -> None:
         "end_age_input": END_AGE,
         "tax_free_pot_input": float(INITIAL_TAX_FREE_POT),
         "baseline_spending_input": 30_000.0,
+        "tax_regime_input": DEFAULT_TAX_REGIME.value,
         "mean_return_input": MEAN_RETURN,
         "std_return_input": STD_RETURN,
         "random_seed_input": RANDOM_SEED,
@@ -728,6 +733,11 @@ def _build_simulation_inputs_from_state(
         30_000.0,
         minimum=0.0,
     )
+    raw_regime = state.get("tax_regime_input")
+    try:
+        tax_regime = TaxRegime(raw_regime) if isinstance(raw_regime, str) else DEFAULT_TAX_REGIME
+    except ValueError:
+        tax_regime = DEFAULT_TAX_REGIME
     mean_return = _coerce_float(
         state.get("mean_return_input"),
         MEAN_RETURN,
@@ -890,6 +900,7 @@ def _build_simulation_inputs_from_state(
         end_age=end_age,
         tax_free_pot=tax_free_pot,
         baseline_spending=baseline_spending,
+        tax_regime=tax_regime,
         mean_return=mean_return,
         std_return=std_return,
         random_seed=random_seed,
@@ -1008,6 +1019,7 @@ def _run_simulation_panel(
         drawdown_fn=base_strategy,
         withdrawals_required=baseline_required,
         dc_pots=inputs.dc_pots,
+        tax_regime=inputs.tax_regime,
     )
     _, scenario_balances, *_ = simulate_multi_pot_pension_path(
         tax_free_pot=inputs.tax_free_pot,
@@ -1021,6 +1033,7 @@ def _run_simulation_panel(
         drawdown_fn=base_strategy,
         withdrawals_required=scenario_required,
         dc_pots=inputs.dc_pots,
+        tax_regime=inputs.tax_regime,
     )
     _, monte_carlo_paths = run_monte_carlo_simulation(
         tax_free_pot=inputs.tax_free_pot,
@@ -1037,6 +1050,7 @@ def _run_simulation_panel(
         seed=inputs.random_seed,
         withdrawals_required=scenario_required,
         dc_pots=inputs.dc_pots,
+        tax_regime=inputs.tax_regime,
     )
 
     baseline_metrics = summarize_path(baseline_balances)
@@ -1183,10 +1197,14 @@ def _run_simulation_panel(
 
 def _format_panel_caption(inputs: SimulationInputs) -> str:
     """Build a short caption describing the assumptions for one panel."""
+    regime_label = (
+        "Scotland tax" if inputs.tax_regime == TaxRegime.SCOTLAND else "UK tax"
+    )
     return (
         f"Ages {inputs.start_age}-{inputs.end_age} | "
         f"Drawdown from {inputs.drawdown_start_age} | "
-        f"Spending £{inputs.baseline_spending:,.0f} | "
+        f"Net spending £{inputs.baseline_spending:,.0f} | "
+        f"{regime_label} | "
         f"Mean {inputs.mean_return * 100:.1f}% | "
         f"Vol {inputs.std_return * 100:.1f}%"
     )
@@ -1532,13 +1550,41 @@ def main() -> None:
             key="tax_free_pot_input",
         )
         st.number_input(
-            "Baseline spending £/year",
+            "Baseline net spending £/year",
             min_value=0.0,
             value=30_000.0,
             step=1_000.0,
             key="baseline_spending_input",
-            help="Planned yearly spending before extra life events.",
+            help=(
+                "Your target annual take-home spending after tax. "
+                "The simulator works out how much to withdraw from taxable DC pots "
+                "to fund this net amount."
+            ),
         )
+        _TAX_REGIME_OPTIONS = {
+            "Rest of UK (England, Wales, N. Ireland)": TaxRegime.REST_OF_UK.value,
+            "Scotland": TaxRegime.SCOTLAND.value,
+        }
+        current_regime_val = st.session_state.get(
+            "tax_regime_input", DEFAULT_TAX_REGIME.value
+        )
+        current_regime_label = next(
+            (k for k, v in _TAX_REGIME_OPTIONS.items() if v == current_regime_val),
+            list(_TAX_REGIME_OPTIONS.keys())[0],
+        )
+        selected_regime_label = st.selectbox(
+            "Tax bands",
+            options=list(_TAX_REGIME_OPTIONS.keys()),
+            index=list(_TAX_REGIME_OPTIONS.keys()).index(current_regime_label),
+            key="tax_regime_input_label",
+            help=(
+                "Choose the income-tax band schedule that applies to you. "
+                "Scotland uses the Scottish Rate of Income Tax (SRIT). "
+                "Affects how much must be withdrawn from taxable DC pots to "
+                "meet your net spending target."
+            ),
+        )
+        st.session_state["tax_regime_input"] = _TAX_REGIME_OPTIONS[selected_regime_label]
 
     with st.sidebar.expander("4) Market & Run Settings", expanded=False):
         st.number_input(

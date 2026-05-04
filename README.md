@@ -194,8 +194,58 @@ pots and start ages.
 - Streamlit theme-variable-based styling so both text contrast and background
   update consistently across main content and sidebar when switching themes.
 
-## Output Files
+## Tax on Drawdowns
 
-- CLI saves charts to `output/` by default.
-- Streamlit can optionally save its generated charts to `output/` using the
-  sidebar checkbox.
+The simulator models UK income tax on pension withdrawals so pot depletion
+reflects real-world gross-vs-net dynamics.
+
+### How it works
+
+| Source | Tax treatment |
+|--------|---------------|
+| Tax-free pot | No tax — withdrawals fund spending directly |
+| DB pension | Gross income; uses up personal allowance and lower bands |
+| DC pot | Taxable — the engine grosses up withdrawals so you receive your *net* spending target after tax |
+
+The **Baseline net spending** input is your target *take-home* amount after tax.
+For every pound you need from a DC pot, the engine works out how many gross
+pounds must actually leave the pot to cover both your spending and any income
+tax due, taking into account how much your DB pension has already consumed of
+the personal allowance and lower bands.
+
+### Selectable tax regime
+
+Use the **Tax bands** selector in the *3) Plan Basics* sidebar (or say
+`"Scottish tax"` / `"Rest of UK tax"` in the chat) to choose:
+
+| Option | Applies to |
+|--------|------------|
+| Rest of UK (England, Wales, N. Ireland) | HMRC standard bands |
+| Scotland | Scottish Rate of Income Tax (SRIT) |
+
+Both regimes use 2024/25 band boundaries and rates, defined as a simple table
+in `ifa/tax.py` — easy to update each tax year.
+
+### Simplifying assumptions
+
+- **Personal allowance taper** (income > £100,000) is not modelled.
+- **DB income** is treated as offsetting spending needs at its gross face value;
+  the marginal tax paid on DB is not separately deducted from the withdrawal
+  requirement.  This means the net-spending target you enter is accurate when DB
+  income falls mostly within the personal allowance and is a slight under-estimate
+  of required gross DC withdrawals when DB income significantly exceeds it.
+- Band boundaries are held constant in real terms; no annual uprating is modelled.
+- National Insurance is not included.
+
+### Chat interface
+
+In `ifa_chat.py`, say things like:
+
+- *"Use Scottish tax bands"*
+- *"Switch to rest-of-UK tax"*
+- *"I pay Scottish income tax"*
+
+The spending target you enter in the chat is your *net* spending need (what you
+want to take home).
+
+

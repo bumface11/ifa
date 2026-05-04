@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Final
 
+from ifa.tax import TaxRegime
+
 INITIAL_TAX_FREE_POT: Final[float] = 173_890
 INITIAL_DC_POT: Final[float] = 100_000
 SECONDARY_DC_POT: Final[float] = 65_000
@@ -37,3 +39,5 @@ GUARDRAILS_TARGET_INCOME: Final[float] = 30_000
 GUARDRAILS_LOWER_BAND: Final[float] = 0.80
 GUARDRAILS_UPPER_BAND: Final[float] = 1.20
 GUARDRAILS_ADJUSTMENT: Final[float] = 0.10
+
+DEFAULT_TAX_REGIME: Final[TaxRegime] = TaxRegime.REST_OF_UK
