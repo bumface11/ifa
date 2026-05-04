@@ -36,6 +36,7 @@ from ifa.metrics import summarize_monte_carlo, summarize_path
 from ifa.models import LumpSumEvent, SpendingStepEvent
 from ifa.plotting import (
     plot_baseline_vs_scenario_balances,
+    plot_cumulative_flows_waterfall,
     plot_individual_pots_subplots,
     plot_monte_carlo_fan_chart,
     plot_pots_stacked_area,
@@ -52,6 +53,7 @@ _CHART_FAN = "fan"
 _CHART_SEQUENCE = "sequence"
 _CHART_STACKED = "stacked"
 _CHART_INDIVIDUAL = "individual"
+_CHART_WATERFALL = "waterfall"
 
 _WELCOME_TEXT = """\
 **Welcome to the IFA Pension Drawdown Chat**
@@ -740,6 +742,7 @@ def _parse_message(
             "lump_events": lump_events,
             "spend_events": spend_events,
             "charts": [
+                _CHART_WATERFALL,
                 _CHART_COMPARISON,
                 _CHART_FAN,
                 _CHART_SEQUENCE,
@@ -795,7 +798,7 @@ def _parse_message(
             "updates": updates,
             "lump_events": lump_events,
             "spend_events": spend_events,
-            "charts": [_CHART_COMPARISON, _CHART_FAN, _CHART_SEQUENCE],
+            "charts": [_CHART_WATERFALL, _CHART_COMPARISON, _CHART_FAN, _CHART_SEQUENCE],
             "auto_run": True,
         }
 
@@ -806,7 +809,7 @@ def _parse_message(
             "updates": updates,
             "lump_events": lump_events,
             "spend_events": spend_events,
-            "charts": [_CHART_COMPARISON, _CHART_FAN],
+            "charts": [_CHART_WATERFALL, _CHART_COMPARISON, _CHART_FAN],
             "auto_run": True,
         }
 
@@ -1156,6 +1159,7 @@ def _run_simulation() -> dict[str, Any] | None:
 
     cache: dict[str, Any] = {
         "ages": ages,
+        "returns": returns,
         "baseline_balances": baseline_balances,
         "scenario_balances": scenario_balances,
         "monte_carlo_paths": monte_carlo_paths,
@@ -1204,7 +1208,21 @@ def _render_chart(chart_type: str, cache: dict[str, Any]) -> None:
     """
     c = cache
 
-    if chart_type == _CHART_COMPARISON:
+    if chart_type == _CHART_WATERFALL:
+        st.markdown("**Cumulative Flows Waterfall**")
+        fig = plot_cumulative_flows_waterfall(
+            ages=c["ages"],
+            annual_returns=c["returns"],
+            baseline_balances=c["baseline_balances"],
+            baseline_required=c["baseline_required"],
+            scenario_required=c["scenario_required"],
+            save_output=False,
+            return_figure=True,
+        )
+        if fig is not None:
+            st.pyplot(fig, clear_figure=True)
+
+    elif chart_type == _CHART_COMPARISON:
         st.markdown("**Baseline vs Life-Events Scenario**")
         fig = plot_baseline_vs_scenario_balances(
             ages=c["ages"],
