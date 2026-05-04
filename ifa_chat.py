@@ -18,6 +18,7 @@ import streamlit as st
 from ifa.config import (
     DB_PENSIONS,
     DC_POTS,
+    DEFAULT_TAX_REGIME,
     END_AGE,
     INITIAL_TAX_FREE_POT,
     MEAN_RETURN,
@@ -34,6 +35,7 @@ from ifa.events import build_required_withdrawals, build_spending_drawdown_sched
 from ifa.explain import build_plain_english_explanation
 from ifa.metrics import summarize_monte_carlo, summarize_path
 from ifa.models import LumpSumEvent, SpendingStepEvent
+from ifa.tax import TaxRegime
 from ifa.plotting import (
     plot_baseline_vs_scenario_balances,
     plot_cumulative_flows_waterfall,
@@ -84,8 +86,11 @@ _HELP_TEXT = """\
 - *"Tax-free pot £[amount]"* — set tax-free pot balance
 - *"DB pension £[amount]/year from age [age]"* — add (or replace) a DB pension
 - *"I spend £[amount]/year"* or *"baseline spending £[amount]"* — set baseline
+  **net** spending target (what you want to take home after tax)
 - *"Retire at [age]"* — update start age
 - *"End age [age]"* or *"plan to age [age]"* — set end age
+- *"Scottish tax"* or *"Scotland"* — use Scottish SRIT bands
+- *"Rest of UK tax"* or *"UK tax"* or *"England"* — use rest-of-UK bands
 
 **Adding life events (these re-run the simulation automatically):**
 - *"What if I need £[amount] at age [age]?"* — one-off lump sum cost
@@ -539,6 +544,27 @@ def _extract_market_params(text: str) -> dict[str, Any]:
     return updates
 
 
+def _extract_tax_regime(text: str) -> TaxRegime | None:
+    """Extract a tax regime selection from *text*.
+
+    Args:
+        text: User message text.
+
+    Returns:
+        :class:`~ifa.tax.TaxRegime` if detected, otherwise ``None``.
+    """
+    if re.search(r"\bscottish\b|\bscotland\b|\bsrit\b", text, re.IGNORECASE):
+        return TaxRegime.SCOTLAND
+    if re.search(
+        r"\brest\s+of\s+uk\b|\bengland\b|\bwales\b|\bnorthern\s+ireland\b"
+        r"|\buk\s+tax\b|\benglish\s+tax\b",
+        text,
+        re.IGNORECASE,
+    ):
+        return TaxRegime.REST_OF_UK
+    return None
+
+
 # ── Intent detection ───────────────────────────────────────────────────────────
 
 
@@ -724,6 +750,10 @@ def _parse_message(
     market = _extract_market_params(t)
     updates.update(market)
 
+    regime = _extract_tax_regime(t)
+    if regime is not None:
+        updates["tax_regime"] = regime
+
     # Use effective start/end ages (possibly just updated) for event validation
     eff_start = updates.get("start_age", start_age)
     eff_end = updates.get("end_age", end_age)
@@ -848,6 +878,7 @@ def _default_state() -> dict[str, Any]:
         "end_age": END_AGE,
         "tax_free_pot": float(INITIAL_TAX_FREE_POT),
         "baseline_spending": _DEFAULT_SPENDING,
+        "tax_regime": DEFAULT_TAX_REGIME,
         "dc_pots": list(DC_POTS),
         "dc_pot_names": [f"DC Pot {i + 1}" for i in range(len(DC_POTS))],
         "db_pensions": list(DB_PENSIONS),
@@ -935,7 +966,18 @@ def _apply_updates(updates: dict[str, Any]) -> list[str]:
     if "baseline_spending" in updates:
         new = updates["baseline_spending"]
         st.session_state["baseline_spending"] = new
-        confirmations.append(f"Baseline annual spending: **£{new:,.0f}**")
+        confirmations.append(f"Baseline annual net spending: **£{new:,.0f}**")
+        st.session_state["sim_run"] = False
+
+    if "tax_regime" in updates:
+        new_regime: TaxRegime = updates["tax_regime"]
+        st.session_state["tax_regime"] = new_regime
+        label = (
+            "Scotland (SRIT)"
+            if new_regime == TaxRegime.SCOTLAND
+            else "Rest of UK"
+        )
+        confirmations.append(f"Tax bands: **{label}**")
         st.session_state["sim_run"] = False
 
     if "db_pensions_add" in updates:
@@ -1042,6 +1084,7 @@ def _run_simulation() -> dict[str, Any] | None:
     end_age: int = s["end_age"]
     tax_free_pot: float = s["tax_free_pot"]
     baseline_spending: float = s["baseline_spending"]
+    tax_regime: TaxRegime = s.get("tax_regime", DEFAULT_TAX_REGIME)
     dc_pots: list[tuple[int, float]] = s["dc_pots"]
     dc_pot_names: list[str] = s["dc_pot_names"]
     db_pensions: list[tuple[int, float]] = s["db_pensions"]
@@ -1121,6 +1164,7 @@ def _run_simulation() -> dict[str, Any] | None:
         drawdown_fn=base_strategy,
         withdrawals_required=baseline_required,
         dc_pots=dc_pots,
+        tax_regime=tax_regime,
     )
     _, scenario_balances, *_ = simulate_multi_pot_pension_path(
         tax_free_pot=tax_free_pot,
@@ -1134,6 +1178,7 @@ def _run_simulation() -> dict[str, Any] | None:
         drawdown_fn=base_strategy,
         withdrawals_required=scenario_required,
         dc_pots=dc_pots,
+        tax_regime=tax_regime,
     )
 
     _, monte_carlo_paths = run_monte_carlo_simulation(
@@ -1151,6 +1196,7 @@ def _run_simulation() -> dict[str, Any] | None:
         seed=random_seed,
         withdrawals_required=scenario_required,
         dc_pots=dc_pots,
+        tax_regime=tax_regime,
     )
 
     baseline_metrics = summarize_path(baseline_balances)
@@ -1184,6 +1230,7 @@ def _run_simulation() -> dict[str, Any] | None:
         "random_seed": random_seed,
         "num_simulations": num_simulations,
         "baseline_spending": baseline_spending,
+        "tax_regime": tax_regime,
         "base_strategy": base_strategy,
         "baseline_required": baseline_required,
         "scenario_required": scenario_required,

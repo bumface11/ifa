@@ -13,6 +13,7 @@ from ifa.events import (
 from ifa.market import generate_deterministic_sequences, generate_random_returns
 from ifa.metrics import summarize_monte_carlo, summarize_path
 from ifa.models import LumpSumEvent, SpendingStepEvent
+from ifa.tax import TaxRegime, calculate_income_tax, gross_up_dc_withdrawal
 
 __all__ = [
     "calculate_db_pension_income",
@@ -27,4 +28,7 @@ __all__ = [
     "build_spending_drawdown_schedule",
     "summarize_path",
     "summarize_monte_carlo",
+    "TaxRegime",
+    "calculate_income_tax",
+    "gross_up_dc_withdrawal",
 ]

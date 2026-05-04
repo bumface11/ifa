@@ -81,6 +81,15 @@ flowchart LR
 
 - `ifa/config.py`
   - Default values for starting pots/ages/return assumptions
+  - Default tax regime (`DEFAULT_TAX_REGIME`)
+
+- `ifa/tax.py`
+  - `TaxRegime` enum (`REST_OF_UK`, `SCOTLAND`)
+  - 2024/25 income-tax band definitions for each regime
+  - `calculate_income_tax(gross_income, regime)` — total tax on a gross income
+  - `gross_up_dc_withdrawal(net_needed, db_income, regime)` — find gross DC
+    withdrawal to fund a net amount after income tax, given existing DB income
+    that already occupies lower bands
 
 - `ifa/strategies.py`
   - Withdrawal strategy functions (fixed real, guardrails, etc.)
@@ -102,6 +111,7 @@ flowchart TB
   CHAT --> EXPLAIN[ifa/explain.py]
   CHAT --> STRAT[ifa/strategies.py]
   CHAT --> MARKET[ifa/market.py]
+  CHAT --> TAX[ifa/tax.py]
 
   IFWEB[ifa_web.py] --> CONFIG
   IFWEB --> MODELS
@@ -111,12 +121,15 @@ flowchart TB
   IFWEB --> PLOTTING
   IFWEB --> EXPLAIN
   IFWEB --> STRAT
+  IFWEB --> TAX
 
   STRAT --> ENGINE
   STRAT --> MODELS
 
   EVENTS --> MODELS
   ENGINE --> MODELS
+  ENGINE --> TAX[ifa/tax.py]
+  CONFIG --> TAX
   EXPLAIN --> MODELS
   EXPLAIN --> METRICS
 
@@ -127,10 +140,16 @@ flowchart TB
 
 The engine uses a **withdrawals_required** array:
 
-- start with baseline spending
+- start with baseline spending (net target after tax)
 - add life events (lump sums and step-ups)
 - subtract DB income
 - clamp at 0
 
 This makes the model easier to explain:
 “this is how much you *need to take from investments* each year”.
+
+When a **tax regime** is selected, the engine additionally grosses up DC
+withdrawals so the pot deduction is the *gross* amount required to fund your
+*net* spending after income tax.  DB income is used to determine your marginal
+tax rate for DC withdrawals (it consumes the personal allowance and lower bands
+first).  Tax-free pot withdrawals are not grossed up.
