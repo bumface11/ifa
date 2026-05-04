@@ -47,6 +47,7 @@ from ifa.metrics import (
 from ifa.models import LifeEvent, LumpSumEvent, SpendingStepEvent
 from ifa.plotting import (
     plot_baseline_vs_scenario_balances,
+    plot_cumulative_flows_waterfall,
     plot_individual_pots_subplots,
     plot_monte_carlo_fan_chart,
     plot_pots_stacked_area,
@@ -121,6 +122,7 @@ class SimulationResults:
     monte_carlo_metrics: MonteCarloMetrics
     explanation: str
     comparison_fig: Figure | None
+    waterfall_fig: Figure | None
     sequence_fig: Figure | None
     fan_fig: Figure | None
     stacked_fig: Figure | None
@@ -1068,6 +1070,16 @@ def _run_simulation_panel(
         return_figure=True,
         output_file=output_dir / f"{output_stem}_baseline_vs_scenario_streamlit.png",
     )
+    waterfall_fig = plot_cumulative_flows_waterfall(
+        ages=ages,
+        annual_returns=returns,
+        baseline_balances=baseline_balances,
+        baseline_required=baseline_required,
+        scenario_required=scenario_required,
+        save_output=save_outputs,
+        return_figure=True,
+        output_file=output_dir / f"{output_stem}_waterfall_streamlit.png",
+    )
     sequence_fig = plot_sequence_of_returns_scenarios(
         tax_free_pot=inputs.tax_free_pot,
         dc_pot=primary_dc_pot,
@@ -1174,6 +1186,7 @@ def _run_simulation_panel(
         monte_carlo_metrics=monte_carlo_metrics,
         explanation=explanation,
         comparison_fig=comparison_fig,
+        waterfall_fig=waterfall_fig,
         sequence_fig=sequence_fig,
         fan_fig=fan_fig,
         stacked_fig=stacked_fig,
@@ -1204,6 +1217,7 @@ def _render_figure(title: str, figure: Figure | None) -> None:
 def _close_simulation_figures(results: SimulationResults) -> None:
     """Close any matplotlib figures attached to one result bundle."""
     for figure in (
+        results.waterfall_fig,
         results.comparison_fig,
         results.sequence_fig,
         results.fan_fig,
@@ -1247,6 +1261,7 @@ def _render_simulation_results(
 
     st.markdown("#### Plain-English Summary")
     st.write(results.explanation)
+    _render_figure("Cumulative Flows Waterfall", results.waterfall_fig)
     _render_figure("Baseline vs Life-Events Scenario", results.comparison_fig)
     _render_figure("Sequence-of-Returns Teaching Chart", results.sequence_fig)
     _render_figure("Monte Carlo Fan Chart", results.fan_fig)

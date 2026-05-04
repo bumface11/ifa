@@ -145,6 +145,14 @@ pots and start ages.
 
 ## What The App Shows
 
+- **Cumulative Flows Waterfall** — the opening chart, showing for each year:
+  - Annual growth (green, above zero): investment return earned on the prior
+    balance.
+  - General drawdown (amber, below zero): regular spending withdrawn from pots
+    (baseline spending net of DB income).
+  - Discretionary drawdown (dark red, stacked below general): extra withdrawals
+    driven by life events such as lump-sum costs or step-up spending.
+  - A lower balance-trajectory panel provides running-total context.
 - Baseline vs scenario line chart on the same market path.
 - Sequence-of-returns teaching chart.
 - Monte Carlo fan chart with ruin probability.
@@ -153,8 +161,8 @@ pots and start ages.
 - The individual-pots view shows tax-free, combined DC, and total-pot balance
   panels, plus an annual spending versus DB income panel showing the gap that
   still needs to come from pots.
-- The first four charts include a secondary axis for spending drawdown
-  (spending requirement minus DB income).
+- The baseline vs scenario, sequence, fan, and stacked charts include a
+  secondary axis for spending drawdown (spending requirement minus DB income).
 - Plain-English explanation of scenario impact.
 - Numbered event markers with a right-side notes panel in age order, so charts
   stay cleaner and event details remain easy to read.

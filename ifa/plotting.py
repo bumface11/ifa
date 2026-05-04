@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import numpy as np
 from matplotlib.figure import Figure
 
@@ -1356,4 +1357,169 @@ def plot_baseline_vs_scenario_balances(
     plt.close()
     return None
 
+
+def plot_cumulative_flows_waterfall(
+    ages: np.ndarray,
+    annual_returns: np.ndarray,
+    baseline_balances: np.ndarray,
+    baseline_required: np.ndarray,
+    scenario_required: np.ndarray,
+    save_output: bool = True,
+    return_figure: bool = False,
+    output_file: str | Path = "cumulative_flows_waterfall.png",
+) -> Figure | None:
+    """Plot a cumulative-flows waterfall showing annual growth and drawdown components.
+
+    Each year is represented as a group of bars that together explain how the
+    total pension balance changes:
+
+    - **Annual growth** (green, above zero): investment return earned on the
+      prior-year balance.
+    - **General drawdown** (amber, below zero): regular spending withdrawn from
+      pots (baseline spending net of DB income).
+    - **Discretionary drawdown** (dark red, stacked below general): extra
+      withdrawals driven by life events such as lump-sum costs or step-up
+      spending.
+
+    A lower panel shows the pension balance trajectory so the cumulative
+    trajectory stays visible alongside the per-year flow bars.
+
+    Args:
+        ages: Ages array of length N (inclusive start and end).
+        annual_returns: Annual returns array of length N-1, one value per year.
+        baseline_balances: Total balance trajectory under the baseline
+            (no life events) scenario, length N.
+        baseline_required: Required pot withdrawals per age under the baseline
+            scenario (spending minus DB income), length N.
+        scenario_required: Required pot withdrawals per age including life
+            events, length N.
+        save_output: When True save the figure to ``output_file``.
+        return_figure: When True return the :class:`~matplotlib.figure.Figure`
+            instead of closing it.
+        output_file: Destination path when ``save_output`` is True.
+
+    Returns:
+        The figure when ``return_figure`` is True, otherwise ``None``.
+
+    Raises:
+        ValueError: If ``annual_returns`` length does not equal ``len(ages) - 1``,
+            or if ``baseline_required`` / ``scenario_required`` lengths do not
+            equal ``len(ages)``.
+    """
+    n = len(ages)
+    expected_returns = n - 1
+    if len(annual_returns) != expected_returns:
+        raise ValueError(
+            "annual_returns length must equal len(ages) - 1; "
+            f"got {len(annual_returns)} for {expected_returns} years"
+        )
+    if len(baseline_required) != n:
+        raise ValueError(
+            "baseline_required length must equal len(ages); "
+            f"got {len(baseline_required)} for {n} ages"
+        )
+    if len(scenario_required) != n:
+        raise ValueError(
+            "scenario_required length must equal len(ages); "
+            f"got {len(scenario_required)} for {n} ages"
+        )
+
+    # Compute per-year flow components for ages[1:] (index 1..N-1).
+    plot_ages = ages[1:]
+    annual_growth_amounts = baseline_balances[:-1] * annual_returns
+    general_drawdown = np.maximum(baseline_required[1:], 0.0)
+    discretionary_drawdown = np.maximum(
+        scenario_required[1:] - baseline_required[1:], 0.0
+    )
+
+    fig, (ax_flows, ax_bal) = plt.subplots(
+        nrows=2,
+        ncols=1,
+        figsize=(13, 9),
+        sharex=True,
+        gridspec_kw={"height_ratios": [3.5, 2.0], "hspace": 0.08},
+    )
+    _apply_chart_chrome(ax_flows)
+    _apply_chart_chrome(ax_bal)
+
+    bar_w = max(0.22, min(0.60, 18.0 / max(len(plot_ages), 1)))
+
+    # Growth bars (positive, green)
+    ax_flows.bar(
+        plot_ages - bar_w,
+        annual_growth_amounts,
+        width=bar_w,
+        color="#27AE60",
+        alpha=0.85,
+        label="Annual growth",
+        zorder=3,
+    )
+
+    # General drawdown bars (negative, amber — stacked from zero downward)
+    ax_flows.bar(
+        plot_ages,
+        -general_drawdown,
+        width=bar_w,
+        color="#E67E22",
+        alpha=0.85,
+        label="General drawdown",
+        zorder=3,
+    )
+
+    # Discretionary drawdown bars (negative, dark red — stacked below general)
+    ax_flows.bar(
+        plot_ages,
+        -discretionary_drawdown,
+        width=bar_w,
+        bottom=-general_drawdown,
+        color="#C0392B",
+        alpha=0.85,
+        label="Discretionary drawdown",
+        zorder=3,
+    )
+
+    ax_flows.axhline(0.0, color="#2C3E50", linewidth=1.0, alpha=0.55, zorder=2)
+    ax_flows.set_ylabel("Annual flow (£)", fontsize=12, fontweight="bold")
+    ax_flows.set_title(
+        "Cumulative Flows Waterfall\n"
+        "Annual growth · General drawdown · Discretionary drawdown",
+        fontsize=14,
+        fontweight="bold",
+    )
+    ax_flows.yaxis.set_major_formatter(
+        mticker.FuncFormatter(lambda v, _: f"£{v / 1_000:.0f}k")
+    )
+    _apply_numeric_text_scale(ax_flows)
+    _place_legend_outside(ax_flows, fontsize=10, ncol=1, anchor_y=0.98, anchor_x=0.76)
+
+    # Balance trajectory in the lower panel
+    ax_bal.plot(
+        ages,
+        baseline_balances,
+        linewidth=2.0,
+        color="#1F77B4",
+        marker="o",
+        markersize=3,
+        label="Balance (baseline)",
+        zorder=3,
+    )
+    ax_bal.axhline(0.0, color="red", linewidth=1.2, linestyle=":", alpha=0.65, zorder=2)
+    ax_bal.set_xlabel("Age", fontsize=12, fontweight="bold")
+    ax_bal.set_ylabel("Pension balance (£)", fontsize=12, fontweight="bold")
+    ax_bal.yaxis.set_major_formatter(
+        mticker.FuncFormatter(lambda v, _: f"£{v / 1_000:.0f}k")
+    )
+    _apply_numeric_text_scale(ax_bal)
+    _place_legend_outside(ax_bal, fontsize=9, ncol=1, anchor_y=0.34, anchor_x=0.76)
+
+    fig.subplots_adjust(left=0.10, right=0.74, top=0.92, bottom=0.08)
+
+    target = _to_output_path(output_file)
+    if save_output:
+        plt.savefig(target, dpi=150, bbox_inches="tight")
+        LOGGER.info("Saved: %s", target)
+    if return_figure:
+        return fig
+    plt.close()
+    return None
 
