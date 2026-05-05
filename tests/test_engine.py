@@ -252,7 +252,7 @@ def test_annual_tax_positive_with_tax_regime_and_dc_withdrawals() -> None:
     from ifa.tax import TaxRegime
 
     returns = np.zeros(5, dtype=np.float64)
-    # Net spending £25,000 well above personal allowance; DB income £0
+    # Withdrawal requirement £25,000 well above personal allowance; DB income £0
     # so DC withdrawals attract tax.
     *_, annual_tax = simulate_multi_pot_pension_path(
         tax_free_pot=0.0,
@@ -267,7 +267,7 @@ def test_annual_tax_positive_with_tax_regime_and_dc_withdrawals() -> None:
         tax_regime=TaxRegime.REST_OF_UK,
     )
 
-    # Annual spending £25,000 > personal allowance £12,570, so tax > 0
+    # DC withdrawal £25,000 > personal allowance £12,570, so tax > 0
     assert np.all(annual_tax[1:] > 0.0)
     assert annual_tax[0] == 0.0  # index 0 is the starting snapshot, no withdrawal
 
