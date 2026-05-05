@@ -52,6 +52,7 @@ def test_simulate_multi_pot_pension_path_invariants_hold() -> None:
         tax_free_balances,
         _,
         total_withdrawals,
+        _,
     ) = simulate_multi_pot_pension_path(
         tax_free_pot=50_000.0,
         dc_pot=80_000.0,
@@ -212,6 +213,7 @@ def test_dc_pot_keeps_growing_after_drawdown_start_when_not_withdrawn() -> None:
         _tax_free_balances,
         _db_income,
         _withdrawals,
+        _,
     ) = simulate_multi_pot_pension_path(
         tax_free_pot=0.0,
         dc_pot=100.0,
@@ -225,3 +227,74 @@ def test_dc_pot_keeps_growing_after_drawdown_start_when_not_withdrawn() -> None:
     )
 
     assert np.allclose(dc_balances, np.array([100.0, 110.0, 121.0]))
+
+
+def test_annual_tax_is_zero_without_tax_regime() -> None:
+    """annual_tax should be all zeros when no tax_regime is provided."""
+    returns = np.zeros(5, dtype=np.float64)
+    *_, annual_tax = simulate_multi_pot_pension_path(
+        tax_free_pot=0.0,
+        dc_pot=100_000.0,
+        secondary_dc_pot=0.0,
+        secondary_dc_drawdown_age=60,
+        db_pensions=[(60, 8_000.0)],
+        start_age=60,
+        end_age=65,
+        returns=returns,
+        withdrawals_required=np.full(6, 5_000.0, dtype=np.float64),
+    )
+
+    assert np.all(annual_tax == 0.0)
+
+
+def test_annual_tax_positive_with_tax_regime_and_dc_withdrawals() -> None:
+    """annual_tax should be positive when tax_regime is set and DC is withdrawn."""
+    from ifa.tax import TaxRegime
+
+    returns = np.zeros(5, dtype=np.float64)
+    # Net spending £25,000 well above personal allowance; DB income £0
+    # so DC withdrawals attract tax.
+    *_, annual_tax = simulate_multi_pot_pension_path(
+        tax_free_pot=0.0,
+        dc_pot=500_000.0,
+        secondary_dc_pot=0.0,
+        secondary_dc_drawdown_age=60,
+        db_pensions=[],
+        start_age=60,
+        end_age=65,
+        returns=returns,
+        withdrawals_required=np.full(6, 25_000.0, dtype=np.float64),
+        tax_regime=TaxRegime.REST_OF_UK,
+    )
+
+    # Annual spending £25,000 > personal allowance £12,570, so tax > 0
+    assert np.all(annual_tax[1:] > 0.0)
+    assert annual_tax[0] == 0.0  # index 0 is the starting snapshot, no withdrawal
+
+
+def test_annual_tax_equals_income_tax_on_db_plus_gross_dc() -> None:
+    """annual_tax should match calculate_income_tax(db + gross_dc, regime)."""
+    from ifa.tax import TaxRegime, calculate_income_tax, gross_up_dc_withdrawal
+
+    db_income = 8_000.0
+    net_needed = 15_000.0
+    regime = TaxRegime.REST_OF_UK
+
+    gross_dc = gross_up_dc_withdrawal(net_needed, db_income, regime)
+    expected_tax = calculate_income_tax(db_income + gross_dc, regime)
+
+    returns = np.zeros(1, dtype=np.float64)
+    *_, annual_tax = simulate_multi_pot_pension_path(
+        tax_free_pot=0.0,
+        dc_pot=500_000.0,
+        secondary_dc_pot=0.0,
+        secondary_dc_drawdown_age=60,
+        db_pensions=[(60, db_income)],
+        start_age=60,
+        end_age=61,
+        returns=returns,
+        withdrawals_required=np.array([net_needed, net_needed], dtype=np.float64),
+        tax_regime=regime,
+    )
+
+    assert np.isclose(annual_tax[1], expected_tax)

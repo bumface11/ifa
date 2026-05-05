@@ -68,6 +68,9 @@ flowchart LR
 - `ifa/engine.py`
   - Runs the simulation (pure logic: pots grow by returns, then we withdraw)
   - Important: it accepts `withdrawals_required` so DB and events are applied once
+  - `simulate_multi_pot_pension_path` returns an 8-element tuple; the 8th element
+    is `annual_tax` — total UK income tax paid each year (zero when no tax regime
+    is set)
 
 - `ifa/metrics.py`
   - Summarises results into easy-to-explain numbers:

@@ -9,6 +9,7 @@ import pytest
 from ifa.models import SpendingStepEvent
 from ifa.plotting import plot_cumulative_flows_waterfall, plot_individual_pots_subplots
 from ifa.strategies import create_fixed_real_drawdown_strategy
+from ifa.tax import TaxRegime
 
 
 def test_individual_pots_subplot_shows_spending_against_db_income() -> None:
@@ -188,3 +189,67 @@ def test_waterfall_validates_scenario_required_length() -> None:
             save_output=False,
             return_figure=True,
         )
+
+
+def test_individual_pots_subplot_shows_tax_deducted_line_when_tax_regime_set() -> None:
+    """Income panel should include a 'Tax deducted' line when tax_regime is given."""
+    figure = plot_individual_pots_subplots(
+        tax_free_pot=0.0,
+        dc_pot=500_000.0,
+        secondary_dc_pot=0.0,
+        secondary_dc_drawdown_age=60,
+        db_pensions=((60, 5_000.0),),
+        start_age=60,
+        end_age=70,
+        mean_return=0.03,
+        std_return=0.0,
+        strategy_fn=create_fixed_real_drawdown_strategy(20_000.0),
+        seed=1,
+        # Net spending £25,000 > personal allowance, so tax > 0
+        withdrawals_required=np.full(11, 25_000.0, dtype=np.float64),
+        annual_spending_schedule=np.full(11, 30_000.0, dtype=np.float64),
+        tax_regime=TaxRegime.REST_OF_UK,
+        return_figure=True,
+        save_output=False,
+    )
+
+    assert figure is not None
+    income_axis = figure.axes[3]
+    legend = income_axis.get_legend()
+    assert legend is not None
+
+    legend_labels = [text.get_text() for text in legend.get_texts()]
+    assert "Tax deducted" in legend_labels
+
+    plt.close(figure)
+
+
+def test_individual_pots_subplot_no_tax_line_without_tax_regime() -> None:
+    """Income panel should not include 'Tax deducted' when no tax_regime is given."""
+    figure = plot_individual_pots_subplots(
+        tax_free_pot=50_000.0,
+        dc_pot=120_000.0,
+        secondary_dc_pot=0.0,
+        secondary_dc_drawdown_age=60,
+        db_pensions=((67, 12_000.0),),
+        start_age=60,
+        end_age=70,
+        mean_return=0.03,
+        std_return=0.0,
+        strategy_fn=create_fixed_real_drawdown_strategy(20_000.0),
+        seed=1,
+        annual_spending_schedule=np.full(11, 20_000.0, dtype=np.float64),
+        return_figure=True,
+        save_output=False,
+    )
+
+    assert figure is not None
+    income_axis = figure.axes[3]
+    legend = income_axis.get_legend()
+
+    legend_labels = (
+        [text.get_text() for text in legend.get_texts()] if legend is not None else []
+    )
+    assert "Tax deducted" not in legend_labels
+
+    plt.close(figure)

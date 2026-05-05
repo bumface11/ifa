@@ -26,6 +26,7 @@ from ifa.strategies import (
     create_fixed_real_drawdown_strategy,
     create_no_withdrawal_strategy,
 )
+from ifa.tax import TaxRegime
 
 LOGGER = logging.getLogger(__name__)
 
@@ -411,6 +412,7 @@ def plot_pots_stacked_area(
         tax_free_balances,
         _,
         _,
+        _,
     ) = simulate_multi_pot_pension_path(
         tax_free_pot,
         dc_pot,
@@ -528,6 +530,7 @@ def plot_individual_pots_subplots(
     withdrawals_required: np.ndarray | None = None,
     life_events: Sequence[LifeEvent] = (),
     annual_spending_schedule: np.ndarray | None = None,
+    tax_regime: TaxRegime | None = None,
     dc_pots: Sequence[DcPotInput] | None = None,
     dc_pot_names: Sequence[str] | None = None,
     db_pension_names: Sequence[str] | None = None,
@@ -536,7 +539,14 @@ def plot_individual_pots_subplots(
     return_figure: bool = False,
     output_file: str | Path = "pots_individual.png",
 ) -> Figure | None:
-    """Plot individual pot trajectories in four panels."""
+    """Plot individual pot trajectories in four panels.
+
+    The bottom-right panel shows Annual Spending vs DB Income.  When
+    *tax_regime* is supplied the panel also draws a **Tax deducted** line
+    showing the total UK income tax paid each year (DB income plus gross DC
+    withdrawals), so users can see how tax bites alongside spending and DB
+    income on the same annual-amount scale.
+    """
     num_years = end_age - start_age
     if annual_returns is None:
         returns = generate_random_returns(num_years, mean_return, std_return, seed)
@@ -556,6 +566,7 @@ def plot_individual_pots_subplots(
         tax_free_balances,
         db_income,
         _,
+        annual_tax,
     ) = simulate_multi_pot_pension_path(
         tax_free_pot,
         dc_pot,
@@ -568,6 +579,7 @@ def plot_individual_pots_subplots(
         strategy_fn if withdrawals_required is None else None,
         withdrawals_required=withdrawals_required,
         dc_pots=dc_pots,
+        tax_regime=tax_regime,
     )
 
     combined_dc_balances = dc_balances + secondary_dc_balances
@@ -665,6 +677,17 @@ def plot_individual_pots_subplots(
             alpha=0.18,
             color="#F59E0B",
             label="Needed from pots",
+        )
+
+    if tax_regime is not None and np.any(annual_tax > 0):
+        ax.step(
+            ages,
+            annual_tax,
+            linewidth=2.0,
+            color="#7C3AED",
+            linestyle=":",
+            label="Tax deducted",
+            where="post",
         )
 
     ax.set_title(
