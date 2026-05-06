@@ -1023,7 +1023,16 @@ def _run_simulation_panel(
         dc_pots=inputs.dc_pots,
         tax_regime=inputs.tax_regime,
     )
-    _, scenario_balances, *_ = simulate_multi_pot_pension_path(
+    (
+        _,
+        scenario_balances,
+        _,
+        _,
+        _,
+        _,
+        _,
+        annual_tax,
+    ) = simulate_multi_pot_pension_path(
         tax_free_pot=inputs.tax_free_pot,
         dc_pot=primary_dc_pot,
         secondary_dc_pot=secondary_dc_pot,
@@ -1073,6 +1082,7 @@ def _run_simulation_panel(
         scenario_balances=scenario_balances,
         annual_returns=returns,
         spending_drawdown_schedule=spending_drawdown_schedule,
+        annual_tax=annual_tax,
         secondary_dc_drawdown_age=secondary_draw_age,
         db_pensions=inputs.db_pensions,
         life_events=inputs.life_events,
@@ -1108,6 +1118,7 @@ def _run_simulation_panel(
         withdrawals_required=scenario_required,
         life_events=inputs.life_events,
         spending_drawdown_schedule=spending_drawdown_schedule,
+        annual_tax=annual_tax,
         dc_pots=inputs.dc_pots,
         dc_pot_names=inputs.dc_pot_names,
         db_pension_names=inputs.db_pension_names,
@@ -1132,6 +1143,7 @@ def _run_simulation_panel(
         withdrawals_required=scenario_required,
         life_events=inputs.life_events,
         spending_drawdown_schedule=spending_drawdown_schedule,
+        annual_tax=annual_tax,
         dc_pots=inputs.dc_pots,
         dc_pot_names=inputs.dc_pot_names,
         db_pension_names=inputs.db_pension_names,
@@ -1156,6 +1168,7 @@ def _run_simulation_panel(
         withdrawals_required=scenario_required,
         life_events=inputs.life_events,
         spending_drawdown_schedule=spending_drawdown_schedule,
+        tax_regime=inputs.tax_regime,
         dc_pots=inputs.dc_pots,
         dc_pot_names=inputs.dc_pot_names,
         db_pension_names=inputs.db_pension_names,
@@ -1185,6 +1198,7 @@ def _run_simulation_panel(
         db_pension_names=inputs.db_pension_names,
         life_event_names=inputs.life_event_names,
         save_output=save_outputs,
+        tax_regime=inputs.tax_regime,
         return_figure=True,
         output_file=output_dir / f"{output_stem}_pots_individual_streamlit.png",
     )

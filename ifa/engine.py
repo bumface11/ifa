@@ -206,6 +206,8 @@ def simulate_multi_pot_pension_path(
         tax_free_balances[index] -= tax_free_withdrawal
         current_withdrawal += tax_free_withdrawal
 
+        gross_dc_withdrawn = 0.0
+
         if current_withdrawal < desired_withdrawal:
             # Net amount still needed from taxable DC pots.
             net_dc_needed = desired_withdrawal - current_withdrawal
@@ -222,7 +224,6 @@ def simulate_multi_pot_pension_path(
             else:
                 gross_dc_needed = net_dc_needed
 
-            gross_dc_withdrawn = 0.0
             for pot_index in range(num_dc_pots):
                 if current_age < int(drawdown_start_ages[pot_index]):
                     continue
@@ -239,10 +240,10 @@ def simulate_multi_pot_pension_path(
 
             current_withdrawal += gross_dc_withdrawn
 
-            if tax_regime is not None:
-                annual_tax[index] = calculate_income_tax(
-                    db_income + gross_dc_withdrawn, tax_regime
-                )
+        if tax_regime is not None:
+            annual_tax[index] = calculate_income_tax(
+                db_income + gross_dc_withdrawn, tax_regime
+            )
 
         if num_dc_pots > 0:
             dc_balance_matrix[:, index] = np.maximum(dc_balance_matrix[:, index], 0.0)

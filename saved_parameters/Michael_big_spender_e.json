@@ -1,14 +1,14 @@
 {
   "version": 1,
-  "name": "Michael_big_spender",
-  "saved_at": "2026-05-06T18:59:57.739527+00:00",
+  "name": "Michael_big_spender_e",
+  "saved_at": "2026-05-06T18:58:50.790095+00:00",
   "sidebar_state": {
     "model_start_age_input": 51,
     "drawdown_start_age_input": 52,
     "end_age_input": 95,
     "tax_free_pot_input": 336000.0,
     "baseline_spending_input": 30000.0,
-    "tax_regime_input": "scotland",
+    "tax_regime_input": "rest_of_uk",
     "mean_return_input": 0.04,
     "std_return_input": 0.1,
     "random_seed_input": 42,

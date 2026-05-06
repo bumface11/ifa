@@ -186,6 +186,7 @@ def _add_spending_axis(
     ax: plt.Axes,
     ages: np.ndarray,
     spending_drawdown_schedule: np.ndarray,
+    annual_tax: np.ndarray | None = None,
 ) -> plt.Axes:
     """Add a secondary axis showing spending drawdown requirement."""
     if spending_drawdown_schedule.shape[0] != ages.shape[0]:
@@ -208,6 +209,16 @@ def _add_spending_axis(
         linewidth=0,
         label="Spending drawdown",
     )
+    if annual_tax is not None and np.any(annual_tax > 0):
+        axis_secondary.step(
+            ages,
+            annual_tax,
+            linewidth=2.0,
+            color="#7C3AED",
+            linestyle=":",
+            label="Tax deducted",
+            where="post",
+        )
     axis_secondary.set_ylim(0.0, upper_bound)
     axis_secondary.set_ylabel(
         "Spending Drawdown (£)",
@@ -384,6 +395,7 @@ def plot_pots_stacked_area(
     withdrawals_required: np.ndarray | None = None,
     life_events: Sequence[LifeEvent] = (),
     spending_drawdown_schedule: np.ndarray | None = None,
+    tax_regime: TaxRegime | None = None,
     dc_pots: Sequence[DcPotInput] | None = None,
     dc_pot_names: Sequence[str] | None = None,
     db_pension_names: Sequence[str] | None = None,
@@ -412,7 +424,7 @@ def plot_pots_stacked_area(
         tax_free_balances,
         _,
         _,
-        _,
+        annual_tax,
     ) = simulate_multi_pot_pension_path(
         tax_free_pot,
         dc_pot,
@@ -425,6 +437,7 @@ def plot_pots_stacked_area(
         strategy_fn if withdrawals_required is None else None,
         withdrawals_required=withdrawals_required,
         dc_pots=dc_pots,
+        tax_regime=tax_regime,
     )
 
     fig, ax = plt.subplots(figsize=(14, 8))
@@ -491,7 +504,9 @@ def plot_pots_stacked_area(
     _apply_numeric_text_scale(ax)
 
     if spending_drawdown_schedule is not None:
-        axis_secondary = _add_spending_axis(ax, ages, spending_drawdown_schedule)
+        axis_secondary = _add_spending_axis(
+            ax, ages, spending_drawdown_schedule, annual_tax=annual_tax
+        )
         _apply_chart_chrome(axis_secondary)
         lines1, labels1 = ax.get_legend_handles_labels()
         lines2, labels2 = axis_secondary.get_legend_handles_labels()
@@ -762,6 +777,7 @@ def plot_sequence_of_returns_scenarios(
     withdrawals_required: np.ndarray | None = None,
     life_events: Sequence[LifeEvent] = (),
     spending_drawdown_schedule: np.ndarray | None = None,
+    annual_tax: np.ndarray | None = None,
     dc_pots: Sequence[DcPotInput] | None = None,
     dc_pot_names: Sequence[str] | None = None,
     db_pension_names: Sequence[str] | None = None,
@@ -903,7 +919,9 @@ def plot_sequence_of_returns_scenarios(
     _apply_numeric_text_scale(ax)
 
     if spending_drawdown_schedule is not None:
-        axis_secondary = _add_spending_axis(ax, ages, spending_drawdown_schedule)
+        axis_secondary = _add_spending_axis(
+            ax, ages, spending_drawdown_schedule, annual_tax=annual_tax
+        )
         lines1, labels1 = ax.get_legend_handles_labels()
         lines2, labels2 = axis_secondary.get_legend_handles_labels()
         _place_legend_outside(
@@ -991,6 +1009,7 @@ def plot_monte_carlo_fan_chart(
     withdrawals_required: np.ndarray | None = None,
     life_events: Sequence[LifeEvent] = (),
     spending_drawdown_schedule: np.ndarray | None = None,
+    annual_tax: np.ndarray | None = None,
     dc_pots: Sequence[DcPotInput] | None = None,
     dc_pot_names: Sequence[str] | None = None,
     db_pension_names: Sequence[str] | None = None,
@@ -1082,7 +1101,9 @@ def plot_monte_carlo_fan_chart(
     _apply_numeric_text_scale(ax)
 
     if spending_drawdown_schedule is not None:
-        axis_secondary = _add_spending_axis(ax, ages, spending_drawdown_schedule)
+        axis_secondary = _add_spending_axis(
+            ax, ages, spending_drawdown_schedule, annual_tax=annual_tax
+        )
         lines1, labels1 = ax.get_legend_handles_labels()
         lines2, labels2 = axis_secondary.get_legend_handles_labels()
         _place_legend_outside(
@@ -1219,6 +1240,7 @@ def plot_baseline_vs_scenario_balances(
     scenario_balances: np.ndarray,
     annual_returns: np.ndarray | None = None,
     spending_drawdown_schedule: np.ndarray | None = None,
+    annual_tax: np.ndarray | None = None,
     secondary_dc_drawdown_age: int | None = None,
     db_pensions: Sequence[DbPensionInput] = (),
     life_events: Sequence[LifeEvent] = (),
@@ -1334,7 +1356,9 @@ def plot_baseline_vs_scenario_balances(
             returns_ax.set_visible(False)
 
     if spending_drawdown_schedule is not None:
-        axis_secondary = _add_spending_axis(ax, ages, spending_drawdown_schedule)
+        axis_secondary = _add_spending_axis(
+            ax, ages, spending_drawdown_schedule, annual_tax=annual_tax
+        )
         _apply_chart_chrome(axis_secondary)
         lines1, labels1 = ax.get_legend_handles_labels()
         lines2, labels2 = axis_secondary.get_legend_handles_labels()
