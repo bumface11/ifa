@@ -8,7 +8,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ifa.models import DbPension, DcPot
-from ifa.tax import TaxRegime, gross_up_dc_withdrawal
+from ifa.tax import TaxRegime, calculate_income_tax, gross_up_dc_withdrawal
 
 DbPensionInput = DbPension | tuple[int, float]
 DcPotInput = DcPot | tuple[int, float]
@@ -86,6 +86,7 @@ def simulate_multi_pot_pension_path(
     NDArray[np.float64],
     NDArray[np.float64],
     NDArray[np.float64],
+    NDArray[np.float64],
 ]:
     """Simulate pension evolution with multiple pots and income streams.
 
@@ -107,7 +108,11 @@ def simulate_multi_pot_pension_path(
             ``None`` disables tax grossing-up (backward-compatible default).
 
     Returns:
-        A tuple containing arrays for ages, balances, incomes, and withdrawals.
+        A tuple of eight arrays: ages, total_balances, dc_balances,
+        secondary_dc_balances, tax_free_balances, db_income_array,
+        total_withdrawals, and annual_tax.  ``annual_tax[i]`` is the total
+        UK income tax paid in the year starting at ``ages[i]``
+        (zero when *tax_regime* is ``None``).
 
     Raises:
         ValueError: If ``returns`` does not contain exactly one value per year.
@@ -142,6 +147,7 @@ def simulate_multi_pot_pension_path(
     tax_free_balances = np.zeros(num_years, dtype=np.float64)
     db_income_array = np.zeros(num_years, dtype=np.float64)
     total_withdrawals = np.zeros(num_years, dtype=np.float64)
+    annual_tax = np.zeros(num_years, dtype=np.float64)
     dc_balance_matrix = np.zeros((num_dc_pots, num_years), dtype=np.float64)
 
     drawdown_start_ages = np.array([pot[0] for pot in dc_pot_config], dtype=np.int_)
@@ -200,6 +206,8 @@ def simulate_multi_pot_pension_path(
         tax_free_balances[index] -= tax_free_withdrawal
         current_withdrawal += tax_free_withdrawal
 
+        gross_dc_withdrawn = 0.0
+
         if current_withdrawal < desired_withdrawal:
             # Net amount still needed from taxable DC pots.
             net_dc_needed = desired_withdrawal - current_withdrawal
@@ -216,7 +224,6 @@ def simulate_multi_pot_pension_path(
             else:
                 gross_dc_needed = net_dc_needed
 
-            gross_dc_withdrawn = 0.0
             for pot_index in range(num_dc_pots):
                 if current_age < int(drawdown_start_ages[pot_index]):
                     continue
@@ -232,6 +239,11 @@ def simulate_multi_pot_pension_path(
                 gross_dc_withdrawn += gross_withdrawal
 
             current_withdrawal += gross_dc_withdrawn
+
+        if tax_regime is not None:
+            annual_tax[index] = calculate_income_tax(
+                db_income + gross_dc_withdrawn, tax_regime
+            )
 
         if num_dc_pots > 0:
             dc_balance_matrix[:, index] = np.maximum(dc_balance_matrix[:, index], 0.0)
@@ -255,6 +267,7 @@ def simulate_multi_pot_pension_path(
         tax_free_balances,
         db_income_array,
         total_withdrawals,
+        annual_tax,
     )
 
 
@@ -308,7 +321,7 @@ def run_monte_carlo_simulation(
         returns = np.random.normal(mean_return, std_return, num_years).astype(
             np.float64
         )
-        _, total_balances, _, _, _, _, _ = simulate_multi_pot_pension_path(
+        _, total_balances, _, _, _, _, _, _ = simulate_multi_pot_pension_path(
             tax_free_pot,
             dc_pot,
             secondary_dc_pot,

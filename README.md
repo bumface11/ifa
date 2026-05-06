@@ -160,7 +160,10 @@ pots and start ages.
   before the charts to explain what each view does.
 - The individual-pots view shows tax-free, combined DC, and total-pot balance
   panels, plus an annual spending versus DB income panel showing the gap that
-  still needs to come from pots.
+  still needs to come from pots.  When a tax regime is selected, the panel also
+  draws a **Tax deducted** line showing the total UK income tax paid each year
+  (DB income plus gross DC withdrawals), so users can see how tax bites
+  alongside spending and DB income on the same annual-amount scale.
 - The baseline vs scenario, sequence, fan, and stacked charts include a
   secondary axis for spending drawdown (spending requirement minus DB income).
 - Plain-English explanation of scenario impact.
@@ -233,6 +236,12 @@ Use the **Tax bands** selector in the *3) Plan Basics* sidebar (or say
 
 Both regimes use 2024/25 band boundaries and rates, defined as a simple table
 in `ifa/tax.py` — easy to update each tax year.
+
+### Tax deducted chart line
+
+When a tax regime is selected, the **Annual Spending vs DB Income** panel (bottom-right of the individual-pots chart) also shows a **Tax deducted** line.  It plots the total UK income tax paid in each year — calculated on gross DB income plus the grossed-up DC withdrawal for that year — on the same annual-amount scale as spending and DB income.  This makes it easy to see when tax starts to bite materially as DB income and drawdown increase.
+
+The line uses the same tax regime you chose in the sidebar (Rest of UK or Scotland).
 
 ### Simplifying assumptions
 

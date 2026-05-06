@@ -33,3 +33,8 @@ warn_unused_ignores = true
 warn_return_any = true
 show_error_codes = true
 files = ["ifa", "pension_drawdown_simulator.py", "tests"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]

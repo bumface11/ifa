@@ -132,6 +132,7 @@ def run_life_events_comparison(
         _,
         _,
         _,
+        _,
     ) = simulate_multi_pot_pension_path(
         tax_free_pot=INITIAL_TAX_FREE_POT,
         dc_pot=float(DC_POTS[0][1]),
@@ -147,6 +148,7 @@ def run_life_events_comparison(
     (
         _,
         scenario_balances,
+        _,
         _,
         _,
         _,
