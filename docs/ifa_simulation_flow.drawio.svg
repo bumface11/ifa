@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+  version="1.1" width="1650" height="180" viewBox="0 0 1650 180"
+  content="&lt;mxGraphModel dx=&quot;1422&quot; dy=&quot;762&quot; grid=&quot;1&quot; gridSize=&quot;10&quot; guides=&quot;1&quot; tooltips=&quot;1&quot; connect=&quot;1&quot; arrows=&quot;1&quot; fold=&quot;1&quot; page=&quot;1&quot; pageScale=&quot;1&quot; pageWidth=&quot;1169&quot; pageHeight=&quot;827&quot; math=&quot;0&quot; shadow=&quot;0&quot;&gt;&lt;root&gt;&lt;mxCell id=&quot;0&quot;/&gt;&lt;mxCell id=&quot;1&quot; parent=&quot;0&quot;/&gt;&lt;mxCell id=&quot;2&quot; value=&quot;Load Saved Parameters&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;40&quot; y=&quot;40&quot; width=&quot;170&quot; height=&quot;60&quot; as=&quot;geometry&quot;/&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;3&quot; value=&quot;Validate Inputs&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;240&quot; y=&quot;40&quot; width=&quot;170&quot; height=&quot;60&quot; as=&quot;geometry&quot;/&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;4&quot; value=&quot;Build Simulation Config&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;440&quot; y=&quot;40&quot; width=&quot;170&quot; height=&quot;60&quot; as=&quot;geometry&quot;/&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;5&quot; value=&quot;Run Engine&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;640&quot; y=&quot;40&quot; width=&quot;170&quot; height=&quot;60&quot; as=&quot;geometry&quot;/&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;6&quot; value=&quot;Apply Strategy Rules&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;840&quot; y=&quot;40&quot; width=&quot;170&quot; height=&quot;60&quot; as=&quot;geometry&quot;/&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;7&quot; value=&quot;Compute Tax and Metrics&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;1040&quot; y=&quot;40&quot; width=&quot;170&quot; height=&quot;60&quot; as=&quot;geometry&quot;/&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;8&quot; value=&quot;Generate Charts and Explanations&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;1240&quot; y=&quot;40&quot; width=&quot;170&quot; height=&quot;60&quot; as=&quot;geometry&quot;/&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;9&quot; value=&quot;Export Results&quot; style=&quot;rounded=1;whiteSpace=wrap;html=1;&quot; vertex=&quot;1&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry x=&quot;1440&quot; y=&quot;40&quot; width=&quot;170&quot; height=&quot;60&quot; as=&quot;geometry&quot;/&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;10&quot; edge=&quot;1&quot; source=&quot;2&quot; target=&quot;3&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot;/&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;11&quot; edge=&quot;1&quot; source=&quot;3&quot; target=&quot;4&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot;/&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;12&quot; edge=&quot;1&quot; source=&quot;4&quot; target=&quot;5&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot;/&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;13&quot; edge=&quot;1&quot; source=&quot;5&quot; target=&quot;6&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot;/&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;14&quot; edge=&quot;1&quot; source=&quot;6&quot; target=&quot;7&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot;/&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;15&quot; edge=&quot;1&quot; source=&quot;7&quot; target=&quot;8&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot;/&gt;&lt;/mxCell&gt;&lt;mxCell id=&quot;16&quot; edge=&quot;1&quot; source=&quot;8&quot; target=&quot;9&quot; parent=&quot;1&quot;&gt;&lt;mxGeometry relative=&quot;1&quot; as=&quot;geometry&quot;/&gt;&lt;/mxCell&gt;&lt;/root&gt;&lt;/mxGraphModel&gt;">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+      markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4a5568"/>
+    </marker>
+    <style type="text/css">
+      .node { fill: #edf2f7; stroke: #4a5568; stroke-width: 1.5; }
+      .lbl  { font-family: Segoe UI, Arial, sans-serif; font-size: 13px;
+               fill: #1a202c; text-anchor: middle; dominant-baseline: middle; }
+      .edge { stroke: #4a5568; stroke-width: 2; fill: none;
+               marker-end: url(#arrow); }
+    </style>
+  </defs>
+  <g>
+    <!-- Node: Load Saved Parameters -->
+    <rect class="node" x="20"   y="60" width="170" height="60" rx="8" ry="8"/>
+    <text class="lbl" x="105"  y="90">Load Saved Parameters</text>
+
+    <!-- Node: Validate Inputs -->
+    <rect class="node" x="220"  y="60" width="170" height="60" rx="8" ry="8"/>
+    <text class="lbl" x="305"  y="90">Validate Inputs</text>
+
+    <!-- Node: Build Simulation Config -->
+    <rect class="node" x="420"  y="60" width="170" height="60" rx="8" ry="8"/>
+    <text class="lbl" x="505"  y="90">Build Simulation Config</text>
+
+    <!-- Node: Run Engine -->
+    <rect class="node" x="620"  y="60" width="170" height="60" rx="8" ry="8"/>
+    <text class="lbl" x="705"  y="90">Run Engine</text>
+
+    <!-- Node: Apply Strategy Rules -->
+    <rect class="node" x="820"  y="60" width="170" height="60" rx="8" ry="8"/>
+    <text class="lbl" x="905"  y="90">Apply Strategy Rules</text>
+
+    <!-- Node: Compute Tax and Metrics -->
+    <rect class="node" x="1020" y="60" width="170" height="60" rx="8" ry="8"/>
+    <text class="lbl" x="1105" y="84">Compute Tax and</text>
+    <text class="lbl" x="1105" y="102">Metrics</text>
+
+    <!-- Node: Generate Charts and Explanations -->
+    <rect class="node" x="1220" y="60" width="190" height="60" rx="8" ry="8"/>
+    <text class="lbl" x="1315" y="84">Generate Charts and</text>
+    <text class="lbl" x="1315" y="102">Explanations</text>
+
+    <!-- Node: Export Results -->
+    <rect class="node" x="1440" y="60" width="170" height="60" rx="8" ry="8"/>
+    <text class="lbl" x="1525" y="90">Export Results</text>
+
+    <!-- Edges -->
+    <line class="edge" x1="190"  y1="90" x2="218"  y2="90"/>
+    <line class="edge" x1="390"  y1="90" x2="418"  y2="90"/>
+    <line class="edge" x1="590"  y1="90" x2="618"  y2="90"/>
+    <line class="edge" x1="790"  y1="90" x2="818"  y2="90"/>
+    <line class="edge" x1="990"  y1="90" x2="1018" y2="90"/>
+    <line class="edge" x1="1190" y1="90" x2="1218" y2="90"/>
+    <line class="edge" x1="1410" y1="90" x2="1438" y2="90"/>
+  </g>
+</svg>

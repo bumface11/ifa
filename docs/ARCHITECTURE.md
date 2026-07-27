@@ -90,3 +90,10 @@ flowchart LR
     `ifa_web.py`.
 - `ifa_web.py` also normalizes saved preset state back into simulation inputs
     so current inputs and comparison presets share the same rendering path.
+
+## Data Model Diagram
+
+- `docs/generate_er_diagram.py` generates `docs/ifa_er_diagram.drawio.svg`.
+- The generated diagram uses crow's-foot relationship notation.
+- The `.drawio.svg` artifact is both GitHub-renderable and editable in draw.io
+    tooling.
