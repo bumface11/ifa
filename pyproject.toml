@@ -11,6 +11,9 @@ dependencies = [
     "streamlit>=1.40",
 ]
 
+[tool.setuptools.packages.find]
+include = ["ifa*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
